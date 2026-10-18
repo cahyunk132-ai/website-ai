@@ -18,6 +18,7 @@ import {
   Cpu,
   Layers,
   Workflow,
+  Key,
 } from 'lucide-react';
 import { Sidebar } from '@/components/Sidebar';
 import { ModelSelector } from '@/components/ModelSelector';
@@ -390,6 +391,14 @@ export default function ChatPage() {
           </div>
 
           <div className="flex items-center gap-2">
+            <button
+              onClick={() => setIsSettingsOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-xs text-slate-300 transition"
+              title="Manage Multi-Account API Key Pool"
+            >
+              <Key className="w-3.5 h-3.5 text-cyan-400" />
+              <span className="hidden sm:inline">Key Pool</span>
+            </button>
             <button
               onClick={() => setIsDashboardOpen(true)}
               className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-xs text-slate-300 transition"

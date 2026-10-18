@@ -20,6 +20,7 @@ export interface ConversationSummary {
 const memoryConversations: Map<string, ConversationSummary> = new Map();
 const memoryMessages: Map<string, ChatMessage[]> = new Map();
 const memoryProviderKeys: Map<ProviderId, string> = new Map();
+const memoryProviderKeyList: Map<ProviderId, string[]> = new Map();
 
 export async function listConversations(): Promise<ConversationSummary[]> {
   const supabase = createServerSupabaseClient();
@@ -184,8 +185,56 @@ export async function deleteConversation(conversationId: string): Promise<void> 
   memoryMessages.delete(conversationId);
 }
 
-export async function saveProviderApiKey(provider: ProviderId, rawKey: string): Promise<void> {
+export async function getProviderApiKeys(provider: ProviderId): Promise<string[]> {
+  const supabase = createServerSupabaseClient();
+  if (supabase) {
+    try {
+      const { data } = await supabase
+        .from('provider_settings')
+        .select('encrypted_api_key')
+        .eq('provider', provider);
+
+      if (data && data.length > 0) {
+        const decryptedList: string[] = [];
+        for (const item of data) {
+          if (item.encrypted_api_key) {
+            const dec = decryptSecret(item.encrypted_api_key);
+            if (dec) decryptedList.push(dec);
+          }
+        }
+        if (decryptedList.length > 0) return decryptedList;
+      }
+    } catch {
+      // Fallback
+    }
+  }
+
+  const list = memoryProviderKeyList.get(provider) || [];
+  if (list.length > 0) {
+    return list.map((k) => decryptSecret(k)).filter(Boolean);
+  }
+
+  const single = memoryProviderKeys.get(provider);
+  if (single) {
+    const dec = decryptSecret(single);
+    return dec ? [dec] : [];
+  }
+
+  return [];
+}
+
+export async function addProviderApiKey(provider: ProviderId, rawKey: string): Promise<void> {
   const encrypted = encryptSecret(rawKey);
+  const currentList = memoryProviderKeyList.get(provider) || [];
+  
+  const existingDecrypted = currentList.map((k) => decryptSecret(k));
+  if (!existingDecrypted.includes(rawKey)) {
+    currentList.push(encrypted);
+    memoryProviderKeyList.set(provider, currentList);
+  }
+
+  memoryProviderKeys.set(provider, encrypted);
+
   const supabase = createServerSupabaseClient();
   if (supabase) {
     try {
@@ -197,37 +246,31 @@ export async function saveProviderApiKey(provider: ProviderId, rawKey: string): 
         },
         { onConflict: 'provider' }
       );
-      return;
     } catch {
       // Fallback
     }
   }
+}
 
-  memoryProviderKeys.set(provider, encrypted);
+export async function removeProviderApiKey(provider: ProviderId, rawKey: string): Promise<boolean> {
+  const currentList = memoryProviderKeyList.get(provider) || [];
+  const filtered = currentList.filter((k) => decryptSecret(k) !== rawKey);
+  memoryProviderKeyList.set(provider, filtered);
+
+  if (filtered.length > 0) {
+    memoryProviderKeys.set(provider, filtered[0]);
+  } else {
+    memoryProviderKeys.delete(provider);
+  }
+
+  return true;
+}
+
+export async function saveProviderApiKey(provider: ProviderId, rawKey: string): Promise<void> {
+  await addProviderApiKey(provider, rawKey);
 }
 
 export async function getProviderApiKey(provider: ProviderId): Promise<string | null> {
-  const supabase = createServerSupabaseClient();
-  if (supabase) {
-    try {
-      const { data } = await supabase
-        .from('provider_settings')
-        .select('encrypted_api_key')
-        .eq('provider', provider)
-        .single();
-
-      if (data?.encrypted_api_key) {
-        return decryptSecret(data.encrypted_api_key);
-      }
-    } catch {
-      // Fallback
-    }
-  }
-
-  const memKey = memoryProviderKeys.get(provider);
-  if (memKey) {
-    return decryptSecret(memKey);
-  }
-
-  return null;
+  const keys = await getProviderApiKeys(provider);
+  return keys.length > 0 ? keys[0] : null;
 }
