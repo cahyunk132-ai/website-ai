@@ -82,159 +82,165 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
         <>
           {/* Mobile backdrop for easy dismissal */}
           <div
-            className="fixed inset-0 z-40 bg-slate-950/70 backdrop-blur-sm sm:hidden"
+            className="fixed inset-0 z-40 bg-black/60 sm:hidden"
             onClick={() => setIsOpen(false)}
           />
-          <div className="fixed sm:absolute inset-x-2 sm:inset-x-auto sm:left-0 top-14 sm:top-auto sm:mt-2 sm:w-96 max-h-[82vh] sm:max-h-[32rem] rounded-2xl bg-slate-900/98 backdrop-blur-md border border-slate-800 shadow-2xl z-50 flex flex-col overflow-hidden animate-fadeIn">
-          {/* Header Controls: Free Tier Toggle & Provider Filters */}
-          <div className="p-2.5 border-b border-slate-800/80 bg-slate-950/80 space-y-2">
-            {/* Free Tier Filter Switch */}
-            <div className="flex items-center justify-between px-1">
-              <span className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
-                <Zap className="w-3.5 h-3.5 text-emerald-400" />
-                <span>Filter Mode:</span>
-              </span>
-              <button
-                type="button"
-                onClick={() => setFreeOnly(!freeOnly)}
-                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold transition ${
-                  freeOnly
-                    ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shadow-sm'
-                    : 'bg-slate-800 text-slate-400 hover:text-slate-200'
-                }`}
-              >
-                {freeOnly && <Check className="w-3 h-3 text-emerald-400" />}
-                <span>{freeOnly ? 'Free Tier Models Only' : 'Show All Models'}</span>
-              </button>
-            </div>
-
-            {/* Provider Filter Tabs */}
-            <div className="flex items-center gap-1 text-xs">
-              <button
-                onClick={() => onSelectProvider('auto')}
-                className={`px-2.5 py-1 rounded-lg text-xs font-medium transition ${
-                  selectedProvider === 'auto'
-                    ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
-                }`}
-              >
-                Auto Route
-              </button>
-              <button
-                onClick={() => onSelectProvider('radox')}
-                className={`px-2.5 py-1 rounded-lg text-xs font-medium transition ${
-                  selectedProvider === 'radox'
-                    ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
-                }`}
-              >
-                Radox AI
-              </button>
-              <button
-                onClick={() => onSelectProvider('inkstone')}
-                className={`px-2.5 py-1 rounded-lg text-xs font-medium transition ${
-                  selectedProvider === 'inkstone'
-                    ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
-                }`}
-              >
-                Intern InkStone
-              </button>
-            </div>
-
-            {/* Quick Search */}
-            <div className="relative">
-              <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-slate-500" />
-              <input
-                type="text"
-                placeholder="Search models..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-8 pr-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-cyan-500"
-              />
-            </div>
-          </div>
-
-          {/* Model Items */}
-          <div className="max-h-80 overflow-y-auto p-2 space-y-1.5">
-            {filteredModels.length === 0 ? (
-              <div className="p-6 text-center text-xs text-slate-500">
-                No models match the filter.
-                {freeOnly && (
-                  <button
-                    onClick={() => setFreeOnly(false)}
-                    className="block mx-auto mt-2 text-cyan-400 hover:underline"
-                  >
-                    Disable "Free Tier Only"
-                  </button>
-                )}
+          <div className="fixed sm:absolute inset-x-2 sm:inset-x-auto sm:left-0 top-14 sm:top-auto sm:mt-2 sm:w-[420px] max-h-[82vh] sm:max-h-[34rem] rounded-2xl bg-slate-950 border border-slate-700/80 shadow-2xl shadow-black/90 z-50 flex flex-col overflow-hidden animate-fadeIn">
+            {/* Header Controls: Free Tier Toggle & Provider Filters */}
+            <div className="p-3 border-b border-slate-800 bg-slate-900 space-y-2.5 shrink-0">
+              {/* Free Tier Filter Switch */}
+              <div className="flex items-center justify-between px-1">
+                <span className="text-xs font-semibold text-slate-200 flex items-center gap-1.5">
+                  <Zap className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Filter Mode:</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setFreeOnly(!freeOnly)}
+                  className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition border ${
+                    freeOnly
+                      ? 'bg-emerald-950 text-emerald-300 border-emerald-500/60 shadow-sm'
+                      : 'bg-slate-800 text-slate-300 border-slate-700 hover:text-white hover:bg-slate-700'
+                  }`}
+                >
+                  {freeOnly && <Check className="w-3 h-3 text-emerald-400" />}
+                  <span>{freeOnly ? 'Free Tier Models Only' : 'Show All Models'}</span>
+                </button>
               </div>
-            ) : (
-              filteredModels.map((model) => {
-                const isSelected =
-                  model.id === selectedModelId &&
-                  (selectedProvider === 'auto' || model.provider === selectedProvider);
-                return (
-                  <div
-                    key={`${model.provider}-${model.id}`}
-                    onClick={() => {
-                      onSelectModel(model.id);
-                      onSelectProvider(model.provider);
-                      setIsOpen(false);
-                    }}
-                    className={`p-2.5 rounded-xl cursor-pointer transition border text-left ${
-                      isSelected
-                        ? 'bg-slate-800/90 border-cyan-500/50 text-slate-100 shadow-sm'
-                        : 'border-transparent hover:bg-slate-800/50 text-slate-300'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between mb-1">
-                      <div className="flex items-center gap-1.5">
-                        <span className="font-semibold text-xs text-slate-100">{model.name}</span>
-                        {model.isFreeQuotaEligible && (
-                          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-950/80 text-emerald-300 border border-emerald-700/50">
-                            FREE
+
+              {/* Provider Filter Tabs (Segmented Control) */}
+              <div className="flex items-center gap-1 text-xs bg-slate-950 p-1 rounded-xl border border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => onSelectProvider('auto')}
+                  className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-semibold transition text-center ${
+                    selectedProvider === 'auto'
+                      ? 'bg-cyan-600 text-white shadow-sm'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                  }`}
+                >
+                  Auto Route
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onSelectProvider('radox')}
+                  className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-semibold transition text-center ${
+                    selectedProvider === 'radox'
+                      ? 'bg-cyan-600 text-white shadow-sm'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                  }`}
+                >
+                  Radox AI
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onSelectProvider('inkstone')}
+                  className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-semibold transition text-center ${
+                    selectedProvider === 'inkstone'
+                      ? 'bg-cyan-600 text-white shadow-sm'
+                      : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/60'
+                  }`}
+                >
+                  Intern InkStone
+                </button>
+              </div>
+
+              {/* Quick Search */}
+              <div className="relative">
+                <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Search by model name or capability..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full pl-9 pr-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500"
+                />
+              </div>
+            </div>
+
+            {/* Model Items */}
+            <div className="max-h-80 sm:max-h-96 overflow-y-auto p-2.5 space-y-2 bg-slate-950">
+              {filteredModels.length === 0 ? (
+                <div className="p-6 text-center text-xs text-slate-500">
+                  No models match the filter.
+                  {freeOnly && (
+                    <button
+                      onClick={() => setFreeOnly(false)}
+                      className="block mx-auto mt-2 text-cyan-400 hover:underline"
+                    >
+                      Disable "Free Tier Only"
+                    </button>
+                  )}
+                </div>
+              ) : (
+                filteredModels.map((model) => {
+                  const isSelected =
+                    model.id === selectedModelId &&
+                    (selectedProvider === 'auto' || model.provider === selectedProvider);
+                  return (
+                    <div
+                      key={`${model.provider}-${model.id}`}
+                      onClick={() => {
+                        onSelectModel(model.id);
+                        onSelectProvider(model.provider);
+                        setIsOpen(false);
+                      }}
+                      className={`p-3 rounded-xl cursor-pointer transition border text-left ${
+                        isSelected
+                          ? 'bg-slate-900 border-cyan-500/80 text-slate-100 shadow-md ring-1 ring-cyan-500/30'
+                          : 'bg-slate-900/90 border-slate-800 hover:bg-slate-900 hover:border-slate-700 text-slate-300'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-1.5">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span className="font-semibold text-xs text-slate-100 truncate">{model.name}</span>
+                          {model.isFreeQuotaEligible && (
+                            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-700/60 shrink-0">
+                              FREE
+                            </span>
+                          )}
+                          <span className="text-[9px] font-mono px-1 py-0.5 rounded bg-slate-800 text-slate-400 shrink-0">
+                            {model.provider === 'inkstone' ? 'InkStone' : 'Radox'}
+                          </span>
+                        </div>
+                        <span className="text-[10px] text-cyan-400 uppercase tracking-wider font-mono font-medium shrink-0 ml-2">
+                          {model.contextWindow >= 1000000
+                            ? `${Math.round(model.contextWindow / 1000000)}M ctx`
+                            : `${Math.round(model.contextWindow / 1000)}k ctx`}
+                        </span>
+                      </div>
+
+                      <p className="text-[11px] text-slate-400 line-clamp-2 mb-2 leading-relaxed">
+                        {model.description}
+                      </p>
+
+                      <div className="flex flex-wrap items-center gap-1">
+                        {model.tags?.map((tag) => (
+                          <span
+                            key={tag}
+                            className={`text-[10px] px-1.5 py-0.5 rounded border ${
+                              tag === 'Free Tier'
+                                ? 'bg-emerald-950/70 text-emerald-300 border-emerald-800 font-medium'
+                                : 'bg-slate-950 text-slate-400 border-slate-800'
+                            }`}
+                          >
+                            {tag}
+                          </span>
+                        ))}
+                        {model.fallbackModelId && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-800/60">
+                            ↳ Fallback: {model.fallbackModelId}
                           </span>
                         )}
                       </div>
-                      <span className="text-[10px] text-cyan-400 uppercase tracking-wider font-mono">
-                        {model.contextWindow >= 1000000
-                          ? `${Math.round(model.contextWindow / 1000000)}M ctx`
-                          : `${Math.round(model.contextWindow / 1000)}k ctx`}
-                      </span>
                     </div>
-
-                    <p className="text-[11px] text-slate-400 line-clamp-2 mb-2 leading-relaxed">
-                      {model.description}
-                    </p>
-
-                    <div className="flex flex-wrap items-center gap-1">
-                      {model.tags?.map((tag) => (
-                        <span
-                          key={tag}
-                          className={`text-[10px] px-1.5 py-0.5 rounded border ${
-                            tag === 'Free Tier'
-                              ? 'bg-emerald-950/40 text-emerald-300 border-emerald-800/50 font-medium'
-                              : 'bg-slate-950/70 text-slate-400 border-slate-800'
-                          }`}
-                        >
-                          {tag}
-                        </span>
-                      ))}
-                      {model.fallbackModelId && (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-cyan-950/40 text-cyan-300 border border-cyan-800/40">
-                          ↳ Fallback: {model.fallbackModelId}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                );
-              })
-            )}
+                  );
+                })
+              )}
+            </div>
           </div>
-        </div>
-      </>
-    )}
+        </>
+      )}
   </div>
   );
 };

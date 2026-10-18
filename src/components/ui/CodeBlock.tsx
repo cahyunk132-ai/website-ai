@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { Check, Copy } from 'lucide-react';
+import { safeCopyText } from '@/lib/safeUUID';
 
 interface CodeBlockProps {
   language?: string;
@@ -13,9 +14,11 @@ export const CodeBlock: React.FC<CodeBlockProps> = ({ language = 'text', value }
 
   const handleCopy = async () => {
     try {
-      await navigator.clipboard.writeText(value);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      const ok = await safeCopyText(value);
+      if (ok) {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      }
     } catch {
       // Fallback
     }

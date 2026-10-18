@@ -14,22 +14,40 @@ export interface ConversationSummary {
   selectedProvider: string;
   createdAt: string;
   updatedAt: string;
+  folderId?: string | null;
+  systemPrompt?: string;
+  temperature?: number;
+  userId?: string | null;
+}
+
+export interface FolderItem {
+  id: string;
+  name: string;
+  color?: string;
+  createdAt: string;
+  userId?: string | null;
 }
 
 // In-memory fallback stores for local development without database configured
 const memoryConversations: Map<string, ConversationSummary> = new Map();
 const memoryMessages: Map<string, ChatMessage[]> = new Map();
+const memoryFolders: Map<string, FolderItem> = new Map([
+  ['folder-work', { id: 'folder-work', name: 'Work & Projects', color: '#06b6d4', createdAt: new Date().toISOString() }],
+  ['folder-research', { id: 'folder-research', name: 'Research & Ideas', color: '#8b5cf6', createdAt: new Date().toISOString() }],
+  ['folder-coding', { id: 'folder-coding', name: 'Coding & Dev', color: '#10b981', createdAt: new Date().toISOString() }],
+]);
 const memoryProviderKeys: Map<ProviderId, string> = new Map();
 const memoryProviderKeyList: Map<ProviderId, string[]> = new Map();
 
-export async function listConversations(): Promise<ConversationSummary[]> {
+export async function listConversations(userId?: string): Promise<ConversationSummary[]> {
   const supabase = createServerSupabaseClient();
   if (supabase) {
     try {
-      const { data, error } = await supabase
-        .from('conversations')
-        .select('*')
-        .order('updated_at', { ascending: false });
+      let query = supabase.from('conversations').select('*');
+      if (userId) {
+        query = query.eq('user_id', userId);
+      }
+      const { data, error } = await query.order('updated_at', { ascending: false });
 
       if (!error && data) {
         return data.map((c) => ({
@@ -39,6 +57,7 @@ export async function listConversations(): Promise<ConversationSummary[]> {
           selectedProvider: c.selected_provider,
           createdAt: c.created_at,
           updatedAt: c.updated_at,
+          userId: c.user_id,
         }));
       }
     } catch {
@@ -46,15 +65,16 @@ export async function listConversations(): Promise<ConversationSummary[]> {
     }
   }
 
-  return Array.from(memoryConversations.values()).sort(
-    (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
-  );
+  return Array.from(memoryConversations.values())
+    .filter((c) => !userId || c.userId === userId || !c.userId)
+    .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
 }
 
 export async function createConversation(
   title: string,
   model: string,
-  provider: string
+  provider: string,
+  userId?: string
 ): Promise<ConversationSummary> {
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
@@ -66,6 +86,7 @@ export async function createConversation(
     selectedProvider: provider,
     createdAt: now,
     updatedAt: now,
+    userId: userId || null,
   };
 
   const supabase = createServerSupabaseClient();
@@ -78,6 +99,7 @@ export async function createConversation(
           title,
           selected_model: model,
           selected_provider: provider,
+          user_id: userId || null,
         })
         .select()
         .single();
@@ -90,6 +112,7 @@ export async function createConversation(
           selectedProvider: data.selected_provider,
           createdAt: data.created_at,
           updatedAt: data.updated_at,
+          userId: data.user_id,
         };
       }
     } catch {
@@ -184,6 +207,115 @@ export async function deleteConversation(conversationId: string): Promise<void> 
   memoryConversations.delete(conversationId);
   memoryMessages.delete(conversationId);
 }
+
+export async function updateConversation(
+  conversationId: string,
+  updates: Partial<ConversationSummary>
+): Promise<ConversationSummary | null> {
+  const supabase = createServerSupabaseClient();
+  if (supabase) {
+    try {
+      const dbUpdates: any = { updated_at: new Date().toISOString() };
+      if (updates.title !== undefined) dbUpdates.title = updates.title;
+      if (updates.folderId !== undefined) dbUpdates.folder_id = updates.folderId;
+      if (updates.systemPrompt !== undefined) dbUpdates.system_prompt = updates.systemPrompt;
+      if (updates.temperature !== undefined) dbUpdates.temperature = updates.temperature;
+
+      const { data, error } = await supabase
+        .from('conversations')
+        .update(dbUpdates)
+        .eq('id', conversationId)
+        .select()
+        .single();
+
+      if (!error && data) {
+        return {
+          id: data.id,
+          title: data.title,
+          selectedModel: data.selected_model,
+          selectedProvider: data.selected_provider,
+          createdAt: data.created_at,
+          updatedAt: data.updated_at,
+          folderId: data.folder_id,
+          systemPrompt: data.system_prompt,
+          temperature: data.temperature,
+        };
+      }
+    } catch {
+      // Fallback
+    }
+  }
+
+  const existing = memoryConversations.get(conversationId);
+  if (!existing) return null;
+
+  const updated: ConversationSummary = {
+    ...existing,
+    ...updates,
+    updatedAt: new Date().toISOString(),
+  };
+  memoryConversations.set(conversationId, updated);
+  return updated;
+}
+
+export async function searchConversations(query: string, userId?: string): Promise<Array<{ conversation: ConversationSummary; matchedIn: 'title' | 'message'; snippet?: string }>> {
+  const q = query.toLowerCase().trim();
+  if (!q) return [];
+
+  const conversations = await listConversations(userId);
+  const results: Array<{ conversation: ConversationSummary; matchedIn: 'title' | 'message'; snippet?: string }> = [];
+
+  for (const conv of conversations) {
+    if (conv.title.toLowerCase().includes(q)) {
+      results.push({ conversation: conv, matchedIn: 'title' });
+      continue;
+    }
+
+    const messages = await getConversationMessages(conv.id);
+    const matchedMsg = messages.find((m) => m.content.toLowerCase().includes(q));
+    if (matchedMsg) {
+      const idx = matchedMsg.content.toLowerCase().indexOf(q);
+      const start = Math.max(0, idx - 30);
+      const end = Math.min(matchedMsg.content.length, idx + q.length + 40);
+      const snippet = '...' + matchedMsg.content.slice(start, end).replace(/\n/g, ' ') + '...';
+      results.push({ conversation: conv, matchedIn: 'message', snippet });
+    }
+  }
+
+  return results;
+}
+
+// Folder Management API
+export async function listFolders(userId?: string): Promise<FolderItem[]> {
+  const all = Array.from(memoryFolders.values());
+  if (!userId) return all;
+  return all.filter((f) => !f.userId || f.userId === userId);
+}
+
+export async function createFolder(name: string, color?: string, userId?: string): Promise<FolderItem> {
+  const id = `folder-${Date.now()}`;
+  const folder: FolderItem = {
+    id,
+    name: name.trim(),
+    color: color || '#38bdf8',
+    createdAt: new Date().toISOString(),
+    userId: userId || null,
+  };
+  memoryFolders.set(id, folder);
+  return folder;
+}
+
+export async function deleteFolder(folderId: string): Promise<boolean> {
+  // Reset conversations inside this folder to null
+  Array.from(memoryConversations.entries()).forEach(([id, conv]) => {
+    if (conv.folderId === folderId) {
+      conv.folderId = null;
+      memoryConversations.set(id, conv);
+    }
+  });
+  return memoryFolders.delete(folderId);
+}
+
 
 export async function getProviderApiKeys(provider: ProviderId): Promise<string[]> {
   const supabase = createServerSupabaseClient();

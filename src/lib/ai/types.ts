@@ -4,10 +4,21 @@
 
 export type ProviderId = 'radox' | 'inkstone';
 
+export interface FileAttachment {
+  id: string;
+  name: string;
+  type: 'image' | 'document';
+  mimeType: string;
+  size: number;
+  url?: string; // base64 data URL or remote URL
+  extractedText?: string;
+}
+
 export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant' | 'system';
   content: string;
+  attachments?: FileAttachment[];
   createdAt?: string;
   model?: string;
   provider?: ProviderId;
@@ -36,11 +47,15 @@ export interface ChatOptions {
   messages: Array<{
     role: 'user' | 'assistant' | 'system';
     content: string;
+    attachments?: FileAttachment[];
   }>;
   model: string;
   provider?: ProviderId;
   temperature?: number;
+  topP?: number;
   maxTokens?: number;
+  systemPrompt?: string;
+  webSearch?: boolean;
   stream?: boolean;
   signal?: AbortSignal;
 }
