@@ -94,6 +94,7 @@
         <StackPanel Grid.Row="1" Margin="0,0,0,16">
             <TextBlock Text="Preset Server Cepat:" FontSize="12" FontWeight="SemiBold" Foreground="#cbd5e1" Margin="0,0,0,8"/>
             <WrapPanel>
+                <Button Content="Vercel Cloud (website-ai-tau.vercel.app)" Style="{StaticResource PrimaryButton}" Margin="0,0,8,8" Click="PresetVercel_Click"/>
                 <Button Content="Localhost (3000)" Style="{StaticResource ModernButton}" Margin="0,0,8,8" Click="PresetLocalhost_Click"/>
                 <Button Content="Wi-Fi / LAN (172.17.35.34)" Style="{StaticResource ModernButton}" Margin="0,0,8,8" Click="PresetLan_Click"/>
             </WrapPanel>

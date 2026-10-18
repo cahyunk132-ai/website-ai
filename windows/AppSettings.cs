@@ -6,8 +6,8 @@ namespace HyunkAIHub;
 
 public class AppSettings
 {
-    public string ServerUrl { get; set; } = "http://localhost:3000";
-    public string FallbackServerUrl { get; set; } = "http://172.17.35.34:3000";
+    public string ServerUrl { get; set; } = "https://website-ai-tau.vercel.app";
+    public string FallbackServerUrl { get; set; } = "http://localhost:3000";
     public bool AutoStartLocalServer { get; set; } = true;
     public double WindowWidth { get; set; } = 1280;
     public double WindowHeight { get; set; } = 820;

@@ -32,6 +32,12 @@ public partial class ServerSettingsWindow : Window
         };
     }
 
+    private void PresetVercel_Click(object sender, RoutedEventArgs e)
+    {
+        UrlTextBox.Text = "https://website-ai-tau.vercel.app";
+        StatusLabel.Text = "";
+    }
+
     private void PresetLocalhost_Click(object sender, RoutedEventArgs e)
     {
         UrlTextBox.Text = "http://localhost:3000";
