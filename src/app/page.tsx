@@ -592,6 +592,28 @@ export default function ChatPage() {
             const dataStr = trimmed.slice(6);
             try {
               const parsed = JSON.parse(dataStr);
+              if (parsed.conversationId) {
+                // The server created a conversation for this turn (first chat of a session).
+                const newConvId: string = parsed.conversationId;
+                setActiveConvId(newConvId);
+                setConversations((prev) =>
+                  prev.some((c) => c.id === newConvId)
+                    ? prev
+                    : [
+                        {
+                          id: newConvId,
+                          title: parsed.conversationTitle || 'New Chat',
+                          selectedModel: selectedModelId,
+                          selectedProvider: selectedProvider,
+                          createdAt: new Date().toISOString(),
+                          updatedAt: new Date().toISOString(),
+                          userId: null,
+                          folderId: null,
+                        },
+                        ...prev,
+                      ]
+                );
+              }
               if (parsed.notice) {
                 setFallbackAlert(parsed.notice);
               }

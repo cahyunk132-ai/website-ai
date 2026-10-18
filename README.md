@@ -54,6 +54,10 @@
 - **Zero API Key Leakage**: API credentials remain strictly server-side. Persistent credentials in Supabase or local storage are encrypted with **AES-256-GCM** authenticated cipher. Masked representations (`sk-****1234`) are shown in the UI.
 - **Live Quota & Usage Telemetry**: Dashboard displaying real-time requests count, input/output tokens, estimated USD spend, last success time, and normalized error logs.
 - **Full Conversation History**: Persisted in Supabase PostgreSQL with strict Row Level Security (RLS) policies, or in-memory fallback during local development.
+- **Persistent Folders & Parameters**: Conversations are grouped in per-user folders (`conversation_folders`) and remember their own system prompt and temperature, persisted in PostgreSQL.
+- **Per-User Daily Quota**: Every AI request is accounted in `usage_logs` (atomic RPC, race free). The default limit is 200 requests/day per user and answers with HTTP 429 once exhausted.
+- **Edge Middleware Protection**: All `/api/*` routes (except the public auth, model catalog and status endpoints) require a valid HMAC signed session cookie — unauthenticated calls are rejected with HTTP 401 before reaching a handler.
+- **Token Accounting**: Prompt/completion tokens reported by the provider are stored per message and rolled up into the daily usage log.
 - **Modern Cyber-Slate Interface**:
   - Multiline auto-expanding textarea with `Shift+Enter` support.
   - Abort / Cancel generation in mid-stream.
@@ -118,17 +122,39 @@ APP_ENCRYPTION_KEY=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abc
 > `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`
 
 ### 5. Run Database Migrations (Supabase)
-Apply `supabase/migrations/20261018000000_init_hyunk_ai_hub.sql` in your Supabase SQL editor:
+Apply the migrations in your Supabase SQL editor (in chronological order):
 ```bash
-# Or via Supabase CLI:
+supabase/migrations/20261018000000_init_hyunk_ai_hub.sql   # base schema
+supabase/migrations/20261019000001_fix_and_features.sql    # folders, quota, multi-key pool
+```
+Or via the Supabase CLI:
+```bash
 supabase db push
 ```
+
+The second migration adds:
+- `conversations.folder_id` / `system_prompt` / `temperature`
+- the persistent `conversation_folders` table (per-user folders)
+- the `usage_logs` table with the atomic `increment_daily_usage` / `add_usage_tokens` RPC helpers
+- multi-key support for `provider_settings` (unique on `(provider, encrypted_api_key)`)
+
+> **Note:** `SUPABASE_SERVICE_ROLE_KEY` is required for the folder persistence, the daily
+> quota accounting and the encrypted credential pool — those tables are restricted to the
+> service role by Row Level Security.
 
 ### 6. Start the Development Server
 ```bash
 npm run dev
 ```
 Open [http://localhost:3000](http://localhost:3000) to start chatting.
+
+Default accounts (seeded into Supabase Auth on first login, and available in local
+memory mode):
+
+| Role  | Email                | Password      |
+| ----- | -------------------- | ------------- |
+| Admin | `admin@hyunkai.com`  | `Password123!`|
+| User  | `demo@hyunkai.com`   | `demo1234`    |
 
 ### 7. Run Unit Tests
 ```bash
@@ -148,6 +174,7 @@ website-ai/
 │   │   │   ├── models/route.ts        # Model capability catalog
 │   │   │   ├── status/route.ts        # Real-time telemetry and quota metrics
 │   │   │   ├── settings/route.ts      # Encrypted credential management
+│   │   │   ├── folders/               # Persistent per-user folder endpoints
 │   │   │   └── conversations/         # Conversation CRUD endpoints
 │   │   ├── globals.css                # Dark theme & styling
 │   │   ├── layout.tsx                 # Root layout & metadata
@@ -160,6 +187,7 @@ website-ai/
 │   │   └── ui/
 │   │       ├── CodeBlock.tsx          # Syntax highlighted code
 │   │       └── MarkdownRenderer.tsx   # GFM markdown renderer
+│   ├── middleware.ts                   # Edge route protection for /api/*
 │   └── lib/
 │       ├── ai/
 │       │   ├── types.ts               # Core AI contracts
@@ -170,11 +198,15 @@ website-ai/
 │       │   └── providers/
 │       │       ├── radox.ts           # Radox AI adapter
 │       │       └── inkstone.ts        # Intern InkStone adapter
+│       ├── auth.ts                    # Login/register, Supabase seeding, sessions
+│       ├── sessionToken.ts            # Edge safe HMAC session tokens
+│       ├── conversationTitle.ts       # Shared title generator
 │       ├── crypto.ts                  # AES-256-GCM encryption & redaction
 │       └── storage.ts                 # Database & in-memory persistence
 ├── supabase/
 │   └── migrations/
-│       └── 20261018000000_init_hyunk_ai_hub.sql
+│       ├── 20261018000000_init_hyunk_ai_hub.sql
+│       └── 20261019000001_fix_and_features.sql
 ├── vitest.config.ts
 ├── tailwind.config.ts
 └── next.config.mjs
@@ -188,6 +220,8 @@ website-ai/
 - **Provider Anti-Abuse Adherence**: The automatic fallback engine strictly respects provider rate limits, bounds exponential retries, and never attempts unauthorized account rotation.
 - **Secret Redaction**: Logging mechanisms automatically filter and redact authorization headers and API tokens.
 - **Secure HTTP Headers**: Configured with strict `Content-Security-Policy`, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, and `Referrer-Policy`.
+- **Signed Sessions**: Session cookies are HMAC-SHA256 signed and verified in constant time; invalid or expired cookies are rejected by the Edge middleware and cleared.
+- **Per-User Quota**: A daily request budget (200 requests) is enforced per account through atomic database counters, so a single user cannot exhaust the shared provider quota.
 
 ---
 

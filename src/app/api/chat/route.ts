@@ -8,9 +8,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { defaultRouter } from '@/lib/ai/router';
 import { ProviderId, ChatMessage, FileAttachment } from '@/lib/ai/types';
-import { saveMessage, getConversationMessages } from '@/lib/storage';
+import { saveMessage, createConversation, checkAndIncrementUsage } from '@/lib/storage';
 import { executeWebSearch, runAgentTool } from '@/lib/ai/tools';
 import { getSessionFromRequest } from '@/lib/auth';
+import { buildConversationTitle } from '@/lib/conversationTitle';
 
 const attachmentSchema = z.object({
   id: z.string(),
@@ -79,6 +80,28 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         { error: 'Invalid request payload', details: parsed.error.format() },
         { status: 400 }
+      );
+    }
+
+    // Enforce the per-user daily quota before any provider call is made.
+    // Malformed requests are rejected before they are counted.
+    const usage = await checkAndIncrementUsage(user.id);
+    if (!usage.allowed) {
+      return NextResponse.json(
+        {
+          error: `Batas penggunaan harian (${usage.limit} request) telah tercapai. Coba lagi besok.`,
+          code: 'DAILY_LIMIT_REACHED',
+          limit: usage.limit,
+          remaining: 0,
+        },
+        {
+          status: 429,
+          headers: {
+            'X-RateLimit-Limit': String(usage.limit),
+            'X-RateLimit-Remaining': '0',
+            'Retry-After': '3600',
+          },
+        }
       );
     }
 
@@ -192,8 +215,29 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Save incoming user message if conversationId exists
+    // Resolve (or auto-create) the conversation this turn belongs to.
     let activeConvId = conversationId;
+    let createdConversation: { id: string; title: string } | null = null;
+
+    if (!activeConvId && lastUserMsg.role === 'user') {
+      // The client did not provide a conversation (e.g. first chat of a session).
+      // Create one on behalf of the authenticated user so nothing is lost.
+      const title = buildConversationTitle(lastUserMsg.content);
+      try {
+        const newConv = await createConversation(
+          title,
+          model,
+          provider ?? 'auto',
+          user.id
+        );
+        activeConvId = newConv.id;
+        createdConversation = { id: newConv.id, title: newConv.title };
+      } catch (err) {
+        console.warn('[Chat] Failed to auto-create conversation:', err);
+      }
+    }
+
+    // Save incoming user message if conversationId exists
     if (activeConvId && lastUserMsg.role === 'user') {
       const userMessageObj: ChatMessage = {
         id: crypto.randomUUID(),
@@ -202,7 +246,7 @@ export async function POST(req: NextRequest) {
         attachments: lastUserMsg.attachments as FileAttachment[] | undefined,
         createdAt: new Date().toISOString(),
       };
-      await saveMessage(activeConvId, userMessageObj);
+      await saveMessage(activeConvId, userMessageObj, user.id);
     }
 
     const encoder = new TextEncoder();
@@ -214,6 +258,18 @@ export async function POST(req: NextRequest) {
         let finalProvider: ProviderId = (providerParam || 'radox');
         let wasFallback = false;
         let fallbackNoticeText: string | undefined;
+
+        // Inform the client about the conversation that was created for this turn
+        if (createdConversation) {
+          controller.enqueue(
+            encoder.encode(
+              `event: conversation\ndata: ${JSON.stringify({
+                conversationId: createdConversation.id,
+                conversationTitle: createdConversation.title,
+              })}\n\n`
+            )
+          );
+        }
 
         // Emit search results if web search was executed
         if (liveSearchResults.length > 0) {
@@ -297,9 +353,11 @@ export async function POST(req: NextRequest) {
               provider: finalProvider,
               isFallback: wasFallback,
               fallbackReason: fallbackNoticeText,
+              tokensPrompt: result.usage?.promptTokens ?? 0,
+              tokensCompletion: result.usage?.completionTokens ?? 0,
               createdAt: new Date().toISOString(),
             };
-            await saveMessage(activeConvId, assistantMessageObj);
+            await saveMessage(activeConvId, assistantMessageObj, user.id);
           }
 
           controller.enqueue(
@@ -329,6 +387,8 @@ export async function POST(req: NextRequest) {
         'Cache-Control': 'no-cache, no-transform',
         Connection: 'keep-alive',
         'X-Accel-Buffering': 'no',
+        'X-RateLimit-Limit': String(usage.limit),
+        'X-RateLimit-Remaining': String(usage.remaining),
       },
     });
   } catch (err: unknown) {

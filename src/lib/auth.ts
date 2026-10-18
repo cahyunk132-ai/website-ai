@@ -6,15 +6,16 @@
 import crypto from 'crypto';
 import { cookies } from 'next/headers';
 import { createClient as createSupabaseClient } from '@supabase/supabase-js';
+import {
+  UserSession,
+  SESSION_COOKIE_NAME,
+  SESSION_MAX_AGE_SECONDS,
+  createSessionToken,
+  verifySessionToken,
+} from './sessionToken';
 
-export interface UserSession {
-  id: string;
-  email: string;
-  name: string;
-  role: 'admin' | 'user';
-  avatarUrl?: string;
-  createdAt: string;
-}
+export { SESSION_COOKIE_NAME, SESSION_MAX_AGE_SECONDS, createSessionToken, verifySessionToken };
+export type { UserSession };
 
 interface LocalStoredUser {
   id: string;
@@ -26,43 +27,53 @@ interface LocalStoredUser {
   createdAt: string;
 }
 
-export const SESSION_COOKIE_NAME = 'hyunk_session';
-const SESSION_MAX_AGE_SECONDS = 30 * 24 * 60 * 60; // 30 days
-
-// Secret key for signing session tokens
-function getSigningSecret(): string {
-  return process.env.APP_ENCRYPTION_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || 'hyunk-ai-hub-auth-secret-key-2026';
+// In-memory local user store fallback.
+// Kept on `globalThis` so that every route bundle shares the same store
+// (Next.js bundles each route handler separately).
+const MEMORY_USERS_KEY = Symbol.for('hyunk-ai-hub.memory-users');
+const globalScope = globalThis as unknown as Record<symbol, Map<string, LocalStoredUser> | undefined>;
+if (!globalScope[MEMORY_USERS_KEY]) {
+  globalScope[MEMORY_USERS_KEY] = new Map<string, LocalStoredUser>();
 }
+const memoryUsers = globalScope[MEMORY_USERS_KEY] as Map<string, LocalStoredUser>;
 
-// In-memory local user store fallback
-const memoryUsers = new Map<string, LocalStoredUser>();
+/**
+ * Default accounts that must exist in Supabase Auth so that the documented
+ * credentials keep working after a cold start (in-memory maps are wiped).
+ */
+export const DEFAULT_USER_ACCOUNTS = [
+  {
+    email: 'admin@hyunkai.com',
+    password: 'Password123!',
+    name: 'Admin Hyunk',
+    role: 'admin' as const,
+  },
+  {
+    email: 'demo@hyunkai.com',
+    password: 'demo1234',
+    name: 'Demo User',
+    role: 'user' as const,
+  },
+];
 
 // Initialize default admin and demo user in local memory store
 function ensureDefaultUsers() {
   if (memoryUsers.size === 0) {
-    const adminSalt = crypto.randomBytes(16).toString('hex');
-    const adminHash = crypto.scryptSync('Password123!', adminSalt, 64).toString('hex');
-    memoryUsers.set('admin@hyunkai.com', {
-      id: '6a2ed95e-ddfb-4845-8ccd-29aaddc0e4ee',
-      email: 'admin@hyunkai.com',
-      name: 'Admin Hyunk',
-      passwordHash: adminHash,
-      salt: adminSalt,
-      role: 'admin',
-      createdAt: new Date().toISOString(),
-    });
-
-    const demoSalt = crypto.randomBytes(16).toString('hex');
-    const demoHash = crypto.scryptSync('demo1234', demoSalt, 64).toString('hex');
-    memoryUsers.set('demo@hyunkai.com', {
-      id: 'demo-user-hyunk-001',
-      email: 'demo@hyunkai.com',
-      name: 'Demo User',
-      passwordHash: demoHash,
-      salt: demoSalt,
-      role: 'user',
-      createdAt: new Date().toISOString(),
-    });
+    for (const account of DEFAULT_USER_ACCOUNTS) {
+      const salt = crypto.randomBytes(16).toString('hex');
+      const hash = crypto.scryptSync(account.password, salt, 64).toString('hex');
+      memoryUsers.set(account.email, {
+        id: account.email === 'admin@hyunkai.com'
+          ? '6a2ed95e-ddfb-4845-8ccd-29aaddc0e4ee'
+          : 'demo-user-hyunk-001',
+        email: account.email,
+        name: account.name,
+        passwordHash: hash,
+        salt,
+        role: account.role,
+        createdAt: new Date().toISOString(),
+      });
+    }
   }
 }
 
@@ -85,67 +96,6 @@ function verifyPassword(password: string, hash: string, salt: string): boolean {
 }
 
 /**
- * Creates a signed, tamper-proof session token
- */
-export function createSessionToken(user: UserSession): string {
-  const payload = {
-    ...user,
-    exp: Date.now() + SESSION_MAX_AGE_SECONDS * 1000,
-  };
-  const jsonStr = JSON.stringify(payload);
-  const base64 = Buffer.from(jsonStr, 'utf8').toString('base64url');
-  const signature = crypto
-    .createHmac('sha256', getSigningSecret())
-    .update(base64)
-    .digest('hex');
-
-  return `${base64}.${signature}`;
-}
-
-/**
- * Verifies and decodes a session token
- */
-export function verifySessionToken(token: string): UserSession | null {
-  if (!token || !token.includes('.')) return null;
-
-  try {
-    const [base64, signature] = token.split('.');
-    if (!base64 || !signature) return null;
-
-    const expectedSig = crypto
-      .createHmac('sha256', getSigningSecret())
-      .update(base64)
-      .digest('hex');
-
-    // Constant-time comparison
-    const sigBuf = Buffer.from(signature);
-    const expBuf = Buffer.from(expectedSig);
-    if (sigBuf.length !== expBuf.length || !crypto.timingSafeEqual(sigBuf, expBuf)) {
-      return null;
-    }
-
-    const jsonStr = Buffer.from(base64, 'base64url').toString('utf8');
-    const parsed = JSON.parse(jsonStr);
-
-    if (!parsed || typeof parsed !== 'object') return null;
-    if (parsed.exp && Date.now() > parsed.exp) {
-      return null; // Expired
-    }
-
-    return {
-      id: parsed.id,
-      email: parsed.email,
-      name: parsed.name,
-      role: parsed.role || 'user',
-      avatarUrl: parsed.avatarUrl,
-      createdAt: parsed.createdAt,
-    };
-  } catch {
-    return null;
-  }
-}
-
-/**
  * Helper to get a Supabase Admin Client
  */
 function getSupabaseAdmin() {
@@ -162,6 +112,91 @@ function getSupabaseAnon() {
   const anonKey = process.env.SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   if (!url || !anonKey) return null;
   return createSupabaseClient(url, anonKey);
+}
+
+// Guards the one-time seeding of the default accounts per server instance.
+let defaultUsersSeeded = false;
+
+/**
+ * Ensures the default admin/demo accounts exist inside Supabase Auth.
+ *
+ * The in-memory `memoryUsers` map is wiped on every cold start (Vercel/serverless),
+ * which would otherwise break the documented default credentials in production.
+ * This function seeds the accounts once per process and keeps the local store in
+ * sync with the real Supabase user ids (needed for UUID based foreign keys).
+ */
+export async function ensureDefaultUsersInSupabase(): Promise<void> {
+  const adminClient = getSupabaseAdmin();
+  if (!adminClient) return;
+  if (defaultUsersSeeded) return;
+
+  defaultUsersSeeded = true;
+
+  try {
+    const { data, error } = await adminClient.auth.admin.listUsers({ page: 1, perPage: 1000 });
+    if (error) {
+      defaultUsersSeeded = false;
+      console.warn('[Auth] Unable to list Supabase users for default seeding:', error.message);
+      return;
+    }
+
+    const existingUsers = data?.users || [];
+    const existingByEmail = new Map(
+      existingUsers
+        .filter((u) => u.email)
+        .map((u) => [u.email!.toLowerCase(), u])
+    );
+
+    for (const account of DEFAULT_USER_ACCOUNTS) {
+      const existing = existingByEmail.get(account.email);
+
+      if (!existing) {
+        const { data: created, error: createError } = await adminClient.auth.admin.createUser({
+          email: account.email,
+          password: account.password,
+          email_confirm: true,
+          user_metadata: { name: account.name, role: account.role },
+        });
+
+        if (createError || !created?.user) {
+          console.warn(
+            `[Auth] Failed to seed default account ${account.email}:`,
+            createError?.message || 'unknown error'
+          );
+          continue;
+        }
+
+        syncLocalUserId(account.email, created.user.id, account.name, account.role);
+        continue;
+      }
+
+      // Account already exists: align the local fallback store with the real UUID.
+      syncLocalUserId(account.email, existing.id, account.name, account.role);
+    }
+  } catch (err: any) {
+    defaultUsersSeeded = false;
+    console.warn('[Auth] Default user seeding failed:', err?.message || String(err));
+  }
+}
+
+/**
+ * Keeps the local (memory) user record aligned with the authoritative Supabase user id.
+ */
+function syncLocalUserId(
+  email: string,
+  supabaseUserId: string,
+  name: string,
+  role: 'admin' | 'user'
+): void {
+  const existing = memoryUsers.get(email);
+  if (!existing) return;
+  if (existing.id === supabaseUserId) return;
+  memoryUsers.set(email, {
+    ...existing,
+    id: supabaseUserId,
+    name: name || existing.name,
+    role: role || existing.role,
+  });
 }
 
 /**
@@ -185,6 +220,7 @@ export async function registerUser(
   }
 
   ensureDefaultUsers();
+  await ensureDefaultUsersInSupabase();
 
   let userId: string = crypto.randomUUID();
   let role: 'admin' | 'user' = 'user';
@@ -245,7 +281,7 @@ export async function registerUser(
     createdAt: now,
   };
 
-  const token = createSessionToken(sessionUser);
+  const token = await createSessionToken(sessionUser);
   return { user: sessionUser, token };
 }
 
@@ -264,6 +300,7 @@ export async function loginUser(
   }
 
   ensureDefaultUsers();
+  await ensureDefaultUsersInSupabase();
 
   // 1. Try Supabase Anon Sign In
   const anonClient = getSupabaseAnon();
@@ -285,7 +322,7 @@ export async function loginUser(
           role,
           createdAt: u.created_at || new Date().toISOString(),
         };
-        const token = createSessionToken(sessionUser);
+        const token = await createSessionToken(sessionUser);
         return { user: sessionUser, token };
       }
     } catch (err: any) {
@@ -305,7 +342,7 @@ export async function loginUser(
         role: localUser.role,
         createdAt: localUser.createdAt,
       };
-      const token = createSessionToken(sessionUser);
+      const token = await createSessionToken(sessionUser);
       return { user: sessionUser, token };
     }
   }
@@ -321,7 +358,7 @@ export async function getSessionFromCookies(): Promise<UserSession | null> {
     const cookieStore = cookies();
     const token = cookieStore.get(SESSION_COOKIE_NAME)?.value;
     if (!token) return null;
-    return verifySessionToken(token);
+    return await verifySessionToken(token);
   } catch {
     return null;
   }
@@ -336,7 +373,7 @@ export async function getSessionFromRequest(request: Request): Promise<UserSessi
     const authHeader = request.headers.get('authorization');
     if (authHeader && authHeader.startsWith('Bearer ')) {
       const bearerToken = authHeader.substring(7).trim();
-      const user = verifySessionToken(bearerToken);
+      const user = await verifySessionToken(bearerToken);
       if (user) return user;
     }
 
@@ -347,7 +384,7 @@ export async function getSessionFromRequest(request: Request): Promise<UserSessi
       for (const c of cookiesList) {
         if (c.startsWith(`${SESSION_COOKIE_NAME}=`)) {
           const val = c.substring(SESSION_COOKIE_NAME.length + 1).trim();
-          const user = verifySessionToken(val);
+          const user = await verifySessionToken(val);
           if (user) return user;
         }
       }
