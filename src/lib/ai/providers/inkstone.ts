@@ -19,7 +19,7 @@ import { recordRequestUsage, recordProviderError, setProviderConfigured } from '
 export class InkstoneAdapter implements ProviderAdapter {
   readonly id: ProviderId = 'inkstone';
   readonly name = 'Intern InkStone';
-  readonly baseUrl = 'https://chat.intern-ai.org.cn/api/v1';
+  readonly baseUrl = 'https://discovery-api.intern-ai.org.cn/v1';
 
   private customApiKey?: string;
 
@@ -44,6 +44,14 @@ export class InkstoneAdapter implements ProviderAdapter {
     const apiKey = this.getApiKey();
     if (!apiKey) {
       throw normalizeProviderError(new Error('Intern InkStone API key is not configured'), this.id, 401);
+    }
+
+    if (options.model === 'intern-decision-4b') {
+      throw normalizeProviderError(
+        new Error("Model 'Intern-Decision-4B' menggunakan Protokol SistemSatu (decision-only) untuk evaluasi terstruktur, bukan model percakapan teks bebas. Silakan gunakan model seperti Intern-S2, DeepSeek-V4, atau Agents-A1."),
+        this.id,
+        400
+      );
     }
 
     const payload = {
@@ -85,7 +93,8 @@ export class InkstoneAdapter implements ProviderAdapter {
     }
 
     const data = await res.json();
-    const content = data.choices?.[0]?.message?.content || '';
+    const msg = data.choices?.[0]?.message;
+    const content = msg?.content || msg?.reasoning_content || '';
     const promptTokens = data.usage?.prompt_tokens ?? 0;
     const completionTokens = data.usage?.completion_tokens ?? 0;
 
@@ -116,6 +125,14 @@ export class InkstoneAdapter implements ProviderAdapter {
     const apiKey = this.getApiKey();
     if (!apiKey) {
       throw normalizeProviderError(new Error('Intern InkStone API key is not configured'), this.id, 401);
+    }
+
+    if (options.model === 'intern-decision-4b') {
+      throw normalizeProviderError(
+        new Error("Model 'Intern-Decision-4B' menggunakan Protokol SistemSatu (decision-only) untuk evaluasi terstruktur, bukan model percakapan teks bebas. Silakan gunakan model seperti Intern-S2, DeepSeek-V4, atau Agents-A1."),
+        this.id,
+        400
+      );
     }
 
     const payload = {
@@ -190,7 +207,9 @@ export class InkstoneAdapter implements ProviderAdapter {
 
             try {
               const chunkJson = JSON.parse(dataStr);
-              const delta = chunkJson.choices?.[0]?.delta?.content || '';
+              const deltaContent = chunkJson.choices?.[0]?.delta?.content || '';
+              const deltaReasoning = chunkJson.choices?.[0]?.delta?.reasoning_content || '';
+              const delta = deltaContent || deltaReasoning;
               if (chunkJson.usage) {
                 promptTokens = chunkJson.usage.prompt_tokens ?? promptTokens;
                 completionTokens = chunkJson.usage.completion_tokens ?? completionTokens;

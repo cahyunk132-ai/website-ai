@@ -23,7 +23,7 @@ const providerStats: Record<ProviderId, ProviderHealth> = {
   inkstone: {
     provider: 'inkstone',
     name: 'Intern InkStone',
-    baseUrl: 'https://chat.intern-ai.org.cn/api/v1',
+    baseUrl: 'https://discovery-api.intern-ai.org.cn/v1',
     isConfigured: false,
     isHealthy: true,
     totalRequests: 0,
