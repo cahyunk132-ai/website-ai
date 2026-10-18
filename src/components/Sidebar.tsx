@@ -43,19 +43,26 @@ export const Sidebar: React.FC<SidebarProps> = ({
     c.title.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  const handleItemClick = (action: () => void) => {
+    action();
+    if (typeof window !== 'undefined' && window.innerWidth < 768) {
+      onToggleOpen();
+    }
+  };
+
   return (
     <>
       {/* Mobile Backdrop */}
       {isOpen && (
         <div
-          className="fixed inset-0 z-40 bg-slate-950/80 backdrop-blur-sm md:hidden"
+          className="fixed inset-0 z-40 bg-slate-950/80 backdrop-blur-sm md:hidden animate-fadeIn"
           onClick={onToggleOpen}
         />
       )}
 
       {/* Sidebar Container */}
       <aside
-        className={`fixed md:static inset-y-0 left-0 z-50 flex flex-col w-72 bg-slate-950 border-r border-slate-800/80 transition-all duration-300 ease-in-out ${
+        className={`fixed md:static inset-y-0 left-0 z-50 flex flex-col w-[85vw] sm:w-80 md:w-72 max-w-sm bg-slate-950 border-r border-slate-800/80 transition-transform duration-300 ease-in-out pb-safe ${
           isOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0 md:w-0 md:border-r-0 md:overflow-hidden'
         }`}
       >
@@ -81,8 +88,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {/* Action: New Chat */}
         <div className="p-3">
           <button
-            onClick={onNewConversation}
-            className="flex items-center justify-center gap-2 w-full px-4 py-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white font-medium text-sm shadow-md shadow-blue-500/10 transition active:scale-[0.98]"
+            onClick={() => handleItemClick(onNewConversation)}
+            className="flex items-center justify-center gap-2 w-full px-4 py-3 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white font-medium text-sm shadow-md shadow-blue-500/10 transition active:scale-[0.98]"
           >
             <Plus className="w-4 h-4" />
             <span>New Chat</span>
@@ -97,7 +104,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               placeholder="Search chats..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-cyan-500"
+              className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-800 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-cyan-500"
             />
           </div>
         )}
@@ -118,15 +125,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
               return (
                 <div
                   key={conv.id}
-                  onClick={() => onSelectConversation(conv.id)}
-                  className={`group flex items-center justify-between px-3 py-2.5 rounded-xl text-xs cursor-pointer transition ${
+                  onClick={() => handleItemClick(() => onSelectConversation(conv.id))}
+                  className={`group flex items-center justify-between px-3 py-3 rounded-xl text-xs cursor-pointer transition ${
                     isActive
                       ? 'bg-slate-800 text-cyan-300 font-medium border border-cyan-500/30'
                       : 'text-slate-400 hover:bg-slate-900 hover:text-slate-200'
                   }`}
                 >
-                  <div className="flex items-center gap-2.5 truncate">
-                    <MessageSquare className={`w-3.5 h-3.5 shrink-0 ${isActive ? 'text-cyan-400' : 'text-slate-500'}`} />
+                  <div className="flex items-center gap-2.5 truncate mr-2">
+                    <MessageSquare className={`w-4 h-4 shrink-0 ${isActive ? 'text-cyan-400' : 'text-slate-500'}`} />
                     <span className="truncate">{conv.title}</span>
                   </div>
                   <button
@@ -134,7 +141,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       e.stopPropagation();
                       onDeleteConversation(conv.id);
                     }}
-                    className="opacity-0 group-hover:opacity-100 p-1 hover:text-rose-400 text-slate-500 transition rounded"
+                    className="p-1.5 opacity-70 sm:opacity-0 group-hover:opacity-100 hover:text-rose-400 text-slate-500 transition rounded hover:bg-slate-800/80"
                     title="Delete Chat"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
@@ -146,20 +153,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
 
         {/* Bottom Utility Actions */}
-        <div className="p-3 border-t border-slate-800/80 bg-slate-950/90 space-y-1.5">
+        <div className="p-3 border-t border-slate-800/80 bg-slate-950/90 space-y-1.5 pb-safe">
           <button
-            onClick={onOpenDashboard}
-            className="flex items-center gap-2.5 w-full px-3 py-2 rounded-xl text-xs text-slate-300 hover:text-white hover:bg-slate-900 transition"
+            onClick={() => handleItemClick(onOpenDashboard)}
+            className="flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-xs text-slate-300 hover:text-white hover:bg-slate-900 transition"
           >
-            <BarChart3 className="w-4 h-4 text-cyan-400" />
-            <span>Usage & Quota Dashboard</span>
+            <BarChart3 className="w-4 h-4 text-cyan-400 shrink-0" />
+            <span className="truncate">Usage & Quota Dashboard</span>
           </button>
           <button
-            onClick={onOpenSettings}
-            className="flex items-center gap-2.5 w-full px-3 py-2 rounded-xl text-xs text-slate-300 hover:text-white hover:bg-slate-900 transition"
+            onClick={() => handleItemClick(onOpenSettings)}
+            className="flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-xs text-slate-300 hover:text-white hover:bg-slate-900 transition"
           >
-            <Settings className="w-4 h-4 text-slate-400" />
-            <span>API Keys & Credentials</span>
+            <Settings className="w-4 h-4 text-slate-400 shrink-0" />
+            <span className="truncate">API Keys & Credentials</span>
           </button>
         </div>
       </aside>

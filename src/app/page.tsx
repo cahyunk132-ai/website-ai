@@ -39,7 +39,7 @@ export default function ChatPage() {
   const [models, setModels] = useState<ModelCapability[]>([]);
   const [selectedModelId, setSelectedModelId] = useState<string>('gpt-5.6-luna');
   const [selectedProvider, setSelectedProvider] = useState<'auto' | ProviderId>('auto');
-  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isDashboardOpen, setIsDashboardOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -51,6 +51,13 @@ export default function ChatPage() {
   const chatContainerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const userScrolledUpRef = useRef<boolean>(false);
+
+  // Initialize sidebar on desktop screens
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.innerWidth >= 768) {
+      setIsSidebarOpen(true);
+    }
+  }, []);
 
   // Fetch initial models & conversations
   useEffect(() => {
@@ -117,6 +124,9 @@ export default function ChatPage() {
     setActiveConvId(convId);
     setErrorMessage(null);
     setFallbackAlert(null);
+    if (typeof window !== 'undefined' && window.innerWidth < 768) {
+      setIsSidebarOpen(false);
+    }
     try {
       const res = await fetch(`/api/conversations/${convId}`);
       if (res.ok) {
@@ -129,6 +139,9 @@ export default function ChatPage() {
   };
 
   const handleNewConversation = async () => {
+    if (typeof window !== 'undefined' && window.innerWidth < 768) {
+      setIsSidebarOpen(false);
+    }
     try {
       const res = await fetch('/api/conversations', {
         method: 'POST',
@@ -322,7 +335,7 @@ export default function ChatPage() {
   };
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-slate-950 font-sans">
+    <div className="flex h-full min-h-[100dvh] w-screen overflow-hidden bg-slate-950 font-sans">
       {/* Sidebar */}
       <Sidebar
         conversations={conversations}
@@ -337,13 +350,13 @@ export default function ChatPage() {
       />
 
       {/* Main Chat Area */}
-      <main className="flex-1 flex flex-col h-full bg-slate-950 relative overflow-hidden">
+      <main className="flex-1 flex flex-col h-full min-h-0 bg-slate-950 relative overflow-hidden">
         {/* Top Navbar */}
-        <header className="flex items-center justify-between px-4 py-3 border-b border-slate-800/80 bg-slate-950/70 backdrop-blur-md z-10">
-          <div className="flex items-center gap-3">
+        <header className="flex items-center justify-between px-2.5 sm:px-4 py-2 sm:py-3 border-b border-slate-800/80 bg-slate-950/70 backdrop-blur-md z-10 gap-1.5 sm:gap-3 shrink-0">
+          <div className="flex items-center gap-1.5 sm:gap-3 min-w-0">
             <button
               onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-              className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-900 border border-slate-800 transition"
+              className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-900 border border-slate-800 transition shrink-0"
               title="Toggle Sidebar"
             >
               <Menu className="w-4 h-4" />
@@ -357,51 +370,52 @@ export default function ChatPage() {
             />
 
             {/* Mode Switcher: Chat vs Agent Mode */}
-            <div className="flex items-center p-0.5 rounded-xl bg-slate-900 border border-slate-800 shadow-inner">
+            <div className="flex items-center p-0.5 rounded-xl bg-slate-900 border border-slate-800 shadow-inner shrink-0">
               <button
                 type="button"
                 onClick={() => setMode('chat')}
-                className={`px-2.5 py-1 rounded-lg text-xs font-medium transition flex items-center gap-1.5 ${
+                className={`px-2 sm:px-2.5 py-1 rounded-lg text-xs font-medium transition flex items-center gap-1 sm:gap-1.5 ${
                   mode === 'chat'
                     ? 'bg-slate-800 text-slate-100 shadow-sm'
                     : 'text-slate-400 hover:text-slate-200'
                 }`}
                 title="Standard Conversational Chat Mode"
               >
-                <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
-                <span>Chat</span>
+                <Sparkles className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                <span className="hidden xs:inline">Chat</span>
               </button>
               <button
                 type="button"
                 onClick={() => setMode('agent')}
-                className={`px-3 py-1 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 ${
+                className={`px-2 sm:px-3 py-1 rounded-lg text-xs font-semibold transition flex items-center gap-1 sm:gap-1.5 ${
                   mode === 'agent'
                     ? 'bg-gradient-to-r from-violet-600 to-indigo-600 text-white shadow-md shadow-violet-600/30 ring-1 ring-violet-400/50'
                     : 'text-slate-400 hover:text-slate-200'
                 }`}
                 title="Autonomous Agent Mode with Reasoning & Tool Actions"
               >
-                <Bot className="w-3.5 h-3.5 text-violet-300" />
-                <span>Agent Mode</span>
+                <Bot className="w-3.5 h-3.5 text-violet-300 shrink-0" />
+                <span className="hidden xs:inline">Agent</span>
                 {mode === 'agent' && (
-                  <span className="w-1.5 h-1.5 rounded-full bg-violet-300 animate-ping" />
+                  <span className="w-1.5 h-1.5 rounded-full bg-violet-300 animate-ping hidden sm:inline-block" />
                 )}
               </button>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
             <button
               onClick={() => setIsSettingsOpen(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-xs text-slate-300 transition"
+              className="p-2 sm:px-3 sm:py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-xs text-slate-300 transition flex items-center gap-1.5"
               title="Manage Multi-Account API Key Pool"
             >
-              <Key className="w-3.5 h-3.5 text-cyan-400" />
+              <Key className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
               <span className="hidden sm:inline">Key Pool</span>
             </button>
             <button
               onClick={() => setIsDashboardOpen(true)}
               className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-xs text-slate-300 transition"
+              title="View Telemetry Dashboard"
             >
               <span className="w-2 h-2 rounded-full bg-emerald-400" />
               <span>Telemetry</span>
@@ -410,12 +424,13 @@ export default function ChatPage() {
         </header>
 
         {/* Quick Free Tier Model Switcher Bar */}
-        <div className="px-4 py-2 border-b border-slate-800/60 bg-slate-900/50 flex items-center justify-between text-xs overflow-x-auto gap-2">
+        <div className="px-2.5 sm:px-4 py-1.5 border-b border-slate-800/60 bg-slate-900/50 flex items-center justify-between text-xs overflow-x-auto no-scrollbar gap-2 shrink-0">
           <div className="flex items-center gap-1.5 shrink-0">
             <Zap className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-            <span className="font-semibold text-emerald-300">Free Tier Models:</span>
+            <span className="font-semibold text-emerald-300 hidden sm:inline">Free Tier Models:</span>
+            <span className="font-semibold text-emerald-300 sm:hidden">Free:</span>
           </div>
-          <div className="flex items-center gap-1.5 overflow-x-auto py-0.5">
+          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
             {models
               .filter((m) => m.isFreeQuotaEligible)
               .slice(0, 15)
@@ -455,11 +470,11 @@ export default function ChatPage() {
 
         {/* Agent Mode Active Banner & Directives */}
         {mode === 'agent' && (
-          <div className="px-4 py-2 border-b border-violet-500/30 bg-gradient-to-r from-violet-950/70 via-slate-950 to-slate-950 flex flex-wrap items-center justify-between text-xs gap-2 animate-fadeIn">
+          <div className="px-2.5 sm:px-4 py-1.5 border-b border-violet-500/30 bg-gradient-to-r from-violet-950/70 via-slate-950 to-slate-950 flex flex-wrap items-center justify-between text-xs gap-2 shrink-0 animate-fadeIn">
             <div className="flex items-center gap-2">
-              <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-violet-900/60 border border-violet-500/40 text-violet-200 text-[11px] font-bold">
+              <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-violet-900/60 border border-violet-500/40 text-violet-200 text-[11px] font-bold">
                 <Brain className="w-3.5 h-3.5 text-violet-300" />
-                <span>AGENT ENGINE ACTIVE</span>
+                <span>AGENT ENGINE</span>
               </div>
               <span className="hidden md:inline text-slate-400 text-[11px]">
                 Autonomous multi-step reasoning, tool execution, and self-verification.
@@ -529,86 +544,86 @@ export default function ChatPage() {
         <div
           ref={chatContainerRef}
           onScroll={handleScroll}
-          className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6"
+          className="flex-1 min-h-0 overflow-y-auto p-3 sm:p-4 md:p-6 space-y-3 sm:space-y-6"
         >
           {messages.length === 0 ? (
-            <div className="h-full flex flex-col items-center justify-center text-center max-w-lg mx-auto p-4">
+            <div className="h-full flex flex-col items-center justify-center text-center max-w-lg mx-auto p-2 sm:p-4">
               <div
-                className={`w-14 h-14 rounded-2xl flex items-center justify-center text-white shadow-xl mb-4 transition ${
+                className={`w-12 h-12 sm:w-14 sm:h-14 rounded-2xl flex items-center justify-center text-white shadow-xl mb-3 sm:mb-4 transition ${
                   mode === 'agent'
                     ? 'bg-gradient-to-tr from-violet-600 via-indigo-600 to-cyan-500 shadow-violet-500/25 ring-2 ring-violet-500/30 animate-pulse'
                     : 'bg-gradient-to-tr from-cyan-600 to-blue-500 shadow-cyan-500/20'
                 }`}
               >
-                {mode === 'agent' ? <Bot className="w-7 h-7" /> : <Sparkles className="w-7 h-7" />}
+                {mode === 'agent' ? <Bot className="w-6 h-6 sm:w-7 sm:h-7" /> : <Sparkles className="w-6 h-6 sm:w-7 sm:h-7" />}
               </div>
-              <h2 className="text-xl font-bold text-slate-100 mb-2">
+              <h2 className="text-lg sm:text-xl font-bold text-slate-100 mb-2">
                 {mode === 'agent' ? 'Autonomous Agent Command Center' : 'Hyunk AI Hub'}
               </h2>
-              <p className="text-xs text-slate-400 mb-6 leading-relaxed">
+              <p className="text-xs text-slate-400 mb-4 sm:mb-6 leading-relaxed px-2">
                 {mode === 'agent'
                   ? 'Autonomous reasoning engine equipped with planning, tool invocation, and full implementation pipelines across Radox AI and Intern InkStone.'
                   : 'Connect seamlessly to Radox AI and Intern InkStone with automatic quota fallback and live telemetry.'}
               </p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 w-full text-left text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-2.5 w-full text-left text-xs">
                 {mode === 'agent' ? (
                   <>
                     <button
                       onClick={() => handleSend('Architect a scalable event-driven distributed system in TypeScript with Redis pub/sub and resilient retries')}
-                      className="p-3 rounded-xl bg-slate-900 border border-slate-800/80 hover:border-violet-500/50 hover:bg-slate-800/60 text-slate-300 transition"
+                      className="p-2.5 sm:p-3 rounded-xl bg-slate-900 border border-slate-800/80 hover:border-violet-500/50 hover:bg-slate-800/60 text-slate-300 transition"
                     >
-                      <p className="font-semibold text-violet-200 mb-1 flex items-center gap-1.5">
-                        <Cpu className="w-3.5 h-3.5 text-violet-400" />
-                        <span>Event-Driven Architecture</span>
+                      <p className="font-semibold text-violet-200 mb-1 flex items-center gap-1.5 text-xs">
+                        <Cpu className="w-3.5 h-3.5 text-violet-400 shrink-0" />
+                        <span className="truncate">Event-Driven Architecture</span>
                       </p>
-                      <p className="text-[11px] text-slate-400">Design fault-tolerant event queues & state</p>
+                      <p className="text-[11px] text-slate-400 line-clamp-1 sm:line-clamp-none">Design fault-tolerant event queues & state</p>
                     </button>
                     <button
                       onClick={() => handleSend('Build a full-stack Next.js real-time chat pipeline with SSE streaming, error backoff, and unit tests')}
-                      className="p-3 rounded-xl bg-slate-900 border border-slate-800/80 hover:border-violet-500/50 hover:bg-slate-800/60 text-slate-300 transition"
+                      className="p-2.5 sm:p-3 rounded-xl bg-slate-900 border border-slate-800/80 hover:border-violet-500/50 hover:bg-slate-800/60 text-slate-300 transition"
                     >
-                      <p className="font-semibold text-violet-200 mb-1 flex items-center gap-1.5">
-                        <Workflow className="w-3.5 h-3.5 text-cyan-400" />
-                        <span>Full-Stack Stream Pipeline</span>
+                      <p className="font-semibold text-violet-200 mb-1 flex items-center gap-1.5 text-xs">
+                        <Workflow className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                        <span className="truncate">Full-Stack Stream Pipeline</span>
                       </p>
-                      <p className="text-[11px] text-slate-400">Implement end-to-end SSE chat & tests</p>
+                      <p className="text-[11px] text-slate-400 line-clamp-1 sm:line-clamp-none">Implement end-to-end SSE chat & tests</p>
                     </button>
                     <button
                       onClick={() => handleSend('Perform a security audit and zero-trust authentication review on a multi-tenant API')}
-                      className="p-3 rounded-xl bg-slate-900 border border-slate-800/80 hover:border-violet-500/50 hover:bg-slate-800/60 text-slate-300 transition"
+                      className="p-2.5 sm:p-3 rounded-xl bg-slate-900 border border-slate-800/80 hover:border-violet-500/50 hover:bg-slate-800/60 text-slate-300 transition"
                     >
-                      <p className="font-semibold text-violet-200 mb-1 flex items-center gap-1.5">
-                        <ShieldAlert className="w-3.5 h-3.5 text-emerald-400" />
-                        <span>Zero-Trust Security Audit</span>
+                      <p className="font-semibold text-violet-200 mb-1 flex items-center gap-1.5 text-xs">
+                        <ShieldAlert className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                        <span className="truncate">Zero-Trust Security Audit</span>
                       </p>
-                      <p className="text-[11px] text-slate-400">Evaluate token validation & threat surfaces</p>
+                      <p className="text-[11px] text-slate-400 line-clamp-1 sm:line-clamp-none">Evaluate token validation & threat surfaces</p>
                     </button>
                     <button
                       onClick={() => handleSend('Deconstruct and explain the deep thinking reasoning protocol of modern open-weights frontier models')}
-                      className="p-3 rounded-xl bg-slate-900 border border-slate-800/80 hover:border-violet-500/50 hover:bg-slate-800/60 text-slate-300 transition"
+                      className="p-2.5 sm:p-3 rounded-xl bg-slate-900 border border-slate-800/80 hover:border-violet-500/50 hover:bg-slate-800/60 text-slate-300 transition"
                     >
-                      <p className="font-semibold text-violet-200 mb-1 flex items-center gap-1.5">
-                        <Brain className="w-3.5 h-3.5 text-pink-400" />
-                        <span>Deep Thinking Analysis</span>
+                      <p className="font-semibold text-violet-200 mb-1 flex items-center gap-1.5 text-xs">
+                        <Brain className="w-3.5 h-3.5 text-pink-400 shrink-0" />
+                        <span className="truncate">Deep Thinking Analysis</span>
                       </p>
-                      <p className="text-[11px] text-slate-400">Explore reasoning chains & verification</p>
+                      <p className="text-[11px] text-slate-400 line-clamp-1 sm:line-clamp-none">Explore reasoning chains & verification</p>
                     </button>
                   </>
                 ) : (
                   <>
                     <button
                       onClick={() => handleSend('Explain the difference between Radox AI and InternLM models')}
-                      className="p-3 rounded-xl bg-slate-900 border border-slate-800/80 hover:border-cyan-500/50 hover:bg-slate-800/60 text-slate-300 transition"
+                      className="p-2.5 sm:p-3 rounded-xl bg-slate-900 border border-slate-800/80 hover:border-cyan-500/50 hover:bg-slate-800/60 text-slate-300 transition"
                     >
-                      <p className="font-semibold text-slate-100 mb-1">Architecture Comparison</p>
-                      <p className="text-[11px] text-slate-400">Compare provider features and latencies</p>
+                      <p className="font-semibold text-slate-100 mb-1 text-xs">Architecture Comparison</p>
+                      <p className="text-[11px] text-slate-400 line-clamp-1 sm:line-clamp-none">Compare provider features and latencies</p>
                     </button>
                     <button
                       onClick={() => handleSend('Write a high-performance TypeScript microservice for streaming AI completions')}
-                      className="p-3 rounded-xl bg-slate-900 border border-slate-800/80 hover:border-cyan-500/50 hover:bg-slate-800/60 text-slate-300 transition"
+                      className="p-2.5 sm:p-3 rounded-xl bg-slate-900 border border-slate-800/80 hover:border-cyan-500/50 hover:bg-slate-800/60 text-slate-300 transition"
                     >
-                      <p className="font-semibold text-slate-100 mb-1">TypeScript Microservice</p>
-                      <p className="text-[11px] text-slate-400">Build high-throughput SSE proxy</p>
+                      <p className="font-semibold text-slate-100 mb-1 text-xs">TypeScript Microservice</p>
+                      <p className="text-[11px] text-slate-400 line-clamp-1 sm:line-clamp-none">Build high-throughput SSE proxy</p>
                     </button>
                   </>
                 )}
@@ -620,25 +635,25 @@ export default function ChatPage() {
               return (
                 <div
                   key={msg.id}
-                  className={`flex gap-3 max-w-4xl mx-auto ${
+                  className={`flex gap-2 sm:gap-3 max-w-4xl mx-auto ${
                     isUser ? 'justify-end' : 'justify-start'
                   }`}
                 >
                   {!isUser && (
                     <div
-                      className={`w-8 h-8 rounded-xl flex items-center justify-center text-white shrink-0 mt-0.5 shadow-md ${
+                      className={`w-7 h-7 sm:w-8 sm:h-8 rounded-lg sm:rounded-xl flex items-center justify-center text-white shrink-0 mt-0.5 shadow-md ${
                         mode === 'agent'
                           ? 'bg-gradient-to-tr from-violet-600 to-indigo-500 shadow-violet-500/20'
                           : 'bg-gradient-to-tr from-blue-600 to-cyan-500 shadow-cyan-500/10'
                       }`}
                     >
-                      {mode === 'agent' ? <Bot className="w-4 h-4" /> : <Sparkles className="w-4 h-4" />}
+                      {mode === 'agent' ? <Bot className="w-3.5 h-3.5 sm:w-4 sm:h-4" /> : <Sparkles className="w-3.5 h-3.5 sm:w-4 sm:h-4" />}
                     </div>
                   )}
 
-                  <div className={`group relative max-w-[85%] md:max-w-[78%]`}>
+                  <div className={`group relative ${isUser ? 'max-w-[88%] sm:max-w-[80%] md:max-w-[75%]' : 'max-w-[92%] sm:max-w-[85%] md:max-w-[78%]'}`}>
                     <div
-                      className={`p-4 rounded-2xl shadow-sm text-sm ${
+                      className={`p-3 sm:p-4 rounded-xl sm:rounded-2xl shadow-sm text-sm ${
                         isUser
                           ? 'bg-blue-600 text-white rounded-tr-sm'
                           : 'bg-slate-900 border border-slate-800/90 text-slate-100 rounded-tl-sm'
@@ -665,14 +680,14 @@ export default function ChatPage() {
 
                     {/* Metadata & Actions */}
                     {!isUser && msg.content && (
-                      <div className="flex items-center gap-2 mt-1.5 px-1 text-xs text-slate-500">
+                      <div className="flex items-center gap-2 mt-1 px-1 text-xs text-slate-500">
                         {mode === 'agent' && (
-                          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-violet-950/80 text-violet-300 border border-violet-800/40">
-                            AGENT MODE
+                          <span className="text-[9px] sm:text-[10px] font-semibold px-1.5 py-0.5 rounded bg-violet-950/80 text-violet-300 border border-violet-800/40">
+                            AGENT
                           </span>
                         )}
                         {msg.model && (
-                          <span className="text-[10px] font-mono text-slate-400">
+                          <span className="text-[10px] font-mono text-slate-400 truncate max-w-[150px]">
                             {msg.model}
                           </span>
                         )}
@@ -698,28 +713,28 @@ export default function ChatPage() {
         </div>
 
         {/* Input Bar Area */}
-        <div className="p-4 border-t border-slate-800/80 bg-slate-950/80 backdrop-blur-md">
-          <div className="max-w-4xl mx-auto space-y-2">
+        <div className="p-2 sm:p-3 md:p-4 border-t border-slate-800/80 bg-slate-950/90 backdrop-blur-md pb-safe shrink-0">
+          <div className="max-w-4xl mx-auto space-y-1.5 sm:space-y-2">
             {/* Input Action Controls */}
             <div className="flex items-center justify-between text-xs px-1">
               <div className="flex items-center gap-2">
                 {messages.length > 0 && !isStreaming && (
                   <button
                     onClick={handleRegenerate}
-                    className="flex items-center gap-1.5 text-slate-400 hover:text-slate-200 transition"
+                    className="flex items-center gap-1.5 text-slate-400 hover:text-slate-200 transition text-[11px] sm:text-xs"
                   >
                     <RotateCcw className="w-3.5 h-3.5" />
                     <span>Regenerate</span>
                   </button>
                 )}
               </div>
-              <div className="text-[11px] text-slate-500">
+              <div className="hidden sm:inline text-[11px] text-slate-500">
                 Shift + Enter for newline
               </div>
             </div>
 
             {/* Input Field Form */}
-            <div className="relative flex items-end gap-2 p-2 rounded-2xl bg-slate-900 border border-slate-800 focus-within:border-cyan-500/70 shadow-lg transition">
+            <div className="relative flex items-end gap-1.5 sm:gap-2 p-1.5 sm:p-2 rounded-2xl bg-slate-900 border border-slate-800 focus-within:border-cyan-500/70 shadow-lg transition">
               <textarea
                 ref={textareaRef}
                 value={input}
@@ -732,18 +747,18 @@ export default function ChatPage() {
                 }}
                 placeholder={
                   mode === 'agent'
-                    ? 'Describe an objective, architectural task, or implementation plan for the Agent...'
+                    ? 'Describe an objective or task for Agent Mode...'
                     : 'Ask Hyunk AI Hub anything...'
                 }
                 rows={1}
-                className="flex-1 max-h-44 p-2 bg-transparent text-sm text-slate-100 placeholder-slate-500 resize-none focus:outline-none"
+                className="flex-1 max-h-36 sm:max-h-44 p-1.5 sm:p-2 bg-transparent text-base sm:text-sm text-slate-100 placeholder-slate-500 resize-none focus:outline-none"
               />
 
               {isStreaming ? (
                 <button
                   type="button"
                   onClick={handleStop}
-                  className="p-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white transition shadow-md shadow-rose-600/20"
+                  className="p-2.5 min-w-[38px] min-h-[38px] flex items-center justify-center rounded-xl bg-rose-600 hover:bg-rose-500 text-white transition shadow-md shadow-rose-600/20 shrink-0"
                   title="Stop generating"
                 >
                   <Square className="w-4 h-4 fill-white" />
@@ -753,7 +768,7 @@ export default function ChatPage() {
                   type="button"
                   onClick={() => handleSend()}
                   disabled={!input.trim()}
-                  className={`p-2.5 rounded-xl text-white transition shadow-md disabled:opacity-40 ${
+                  className={`p-2.5 min-w-[38px] min-h-[38px] flex items-center justify-center rounded-xl text-white transition shadow-md disabled:opacity-40 shrink-0 ${
                     mode === 'agent'
                       ? 'bg-gradient-to-r from-violet-600 via-indigo-600 to-cyan-600 hover:from-violet-500 hover:to-cyan-500 shadow-violet-600/30'
                       : 'bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 shadow-blue-600/20'

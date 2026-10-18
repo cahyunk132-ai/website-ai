@@ -60,24 +60,32 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-800 hover:border-cyan-500/50 text-xs text-slate-200 transition shadow-sm"
+        className="flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-800 hover:border-cyan-500/50 text-xs text-slate-200 transition shadow-sm max-w-[130px] xs:max-w-[180px] sm:max-w-none"
       >
-        <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-        <span className="font-semibold text-slate-100">{selectedModel?.name || 'Select Model'}</span>
+        <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
+        <span className="font-semibold text-slate-100 truncate text-[11px] sm:text-xs">
+          {selectedModel?.name?.replace(' (Radox Free)', '')?.replace(' (InkStone Free)', '') || 'Select Model'}
+        </span>
         {selectedModel?.isFreeQuotaEligible && (
-          <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-950/80 text-emerald-300 border border-emerald-700/50">
-            FREE TIER
+          <span className="hidden sm:inline-block text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-950/80 text-emerald-300 border border-emerald-700/50 shrink-0">
+            FREE
           </span>
         )}
-        <span className="text-[11px] text-slate-400 px-1.5 py-0.5 rounded bg-slate-800">
-          {selectedProvider === 'auto' ? 'Auto Fallback' : selectedModel?.provider}
+        <span className="hidden md:inline-block text-[11px] text-slate-400 px-1.5 py-0.5 rounded bg-slate-800 shrink-0">
+          {selectedProvider === 'auto' ? 'Auto' : selectedModel?.provider}
         </span>
-        <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+        <ChevronDown className="w-3.5 h-3.5 text-slate-400 shrink-0" />
       </button>
 
       {/* Dropdown Menu */}
       {isOpen && (
-        <div className="absolute left-0 mt-2 w-84 sm:w-96 rounded-2xl bg-slate-900/95 backdrop-blur-md border border-slate-800 shadow-2xl z-50 overflow-hidden">
+        <>
+          {/* Mobile backdrop for easy dismissal */}
+          <div
+            className="fixed inset-0 z-40 bg-slate-950/70 backdrop-blur-sm sm:hidden"
+            onClick={() => setIsOpen(false)}
+          />
+          <div className="fixed sm:absolute inset-x-2 sm:inset-x-auto sm:left-0 top-14 sm:top-auto sm:mt-2 sm:w-96 max-h-[82vh] sm:max-h-[32rem] rounded-2xl bg-slate-900/98 backdrop-blur-md border border-slate-800 shadow-2xl z-50 flex flex-col overflow-hidden animate-fadeIn">
           {/* Header Controls: Free Tier Toggle & Provider Filters */}
           <div className="p-2.5 border-b border-slate-800/80 bg-slate-950/80 space-y-2">
             {/* Free Tier Filter Switch */}
@@ -225,7 +233,8 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
             )}
           </div>
         </div>
-      )}
-    </div>
+      </>
+    )}
+  </div>
   );
 };

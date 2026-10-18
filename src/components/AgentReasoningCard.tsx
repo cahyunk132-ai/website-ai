@@ -156,9 +156,9 @@ export const AgentReasoningCard: React.FC<AgentReasoningCardProps> = ({
                 key={idx}
                 className="rounded-xl border border-cyan-500/30 bg-slate-950/80 p-3 space-y-2 shadow-sm text-xs font-mono"
               >
-                <div className="flex items-center justify-between border-b border-slate-800 pb-2">
-                  <div className="flex items-center gap-2">
-                    <div className="p-1 rounded bg-cyan-950 text-cyan-400 border border-cyan-800/60">
+                <div className="flex flex-wrap items-center justify-between border-b border-slate-800 pb-2 gap-1.5">
+                  <div className="flex flex-wrap items-center gap-1.5 min-w-0">
+                    <div className="p-1 rounded bg-cyan-950 text-cyan-400 border border-cyan-800/60 shrink-0">
                       {isCode ? (
                         <Code2 className="w-3.5 h-3.5" />
                       ) : isSearch ? (
@@ -167,16 +167,16 @@ export const AgentReasoningCard: React.FC<AgentReasoningCardProps> = ({
                         <Wrench className="w-3.5 h-3.5" />
                       )}
                     </div>
-                    <span className="font-semibold text-cyan-300 font-sans">
+                    <span className="font-semibold text-cyan-300 font-sans truncate">
                       Tool Call: <span className="text-cyan-200 font-mono">{act.tool}</span>
                     </span>
                     {act.target && (
-                      <span className="text-[10px] text-slate-400 font-sans">
+                      <span className="text-[10px] text-slate-400 font-sans truncate">
                         Target: <span className="text-slate-300 font-mono">{act.target}</span>
                       </span>
                     )}
                   </div>
-                  <span className="flex items-center gap-1 text-[10px] text-emerald-400 bg-emerald-950/50 px-2 py-0.5 rounded border border-emerald-800/40">
+                  <span className="flex items-center gap-1 text-[10px] text-emerald-400 bg-emerald-950/50 px-2 py-0.5 rounded border border-emerald-800/40 shrink-0">
                     <CheckCircle2 className="w-3 h-3" />
                     <span>Success</span>
                   </span>
