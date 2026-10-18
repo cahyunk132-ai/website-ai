@@ -11,6 +11,7 @@ import {
   Server,
   ChevronLeft,
   ChevronRight,
+  Smartphone,
 } from 'lucide-react';
 import { ConversationSummary } from '@/lib/storage';
 
@@ -22,6 +23,7 @@ interface SidebarProps {
   onDeleteConversation: (id: string) => void;
   onOpenSettings: () => void;
   onOpenDashboard: () => void;
+  onOpenDownloadApp?: () => void;
   isOpen: boolean;
   onToggleOpen: () => void;
 }
@@ -34,6 +36,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onDeleteConversation,
   onOpenSettings,
   onOpenDashboard,
+  onOpenDownloadApp,
   isOpen,
   onToggleOpen,
 }) => {
@@ -154,6 +157,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
         {/* Bottom Utility Actions */}
         <div className="p-3 border-t border-slate-800/80 bg-slate-950/90 space-y-1.5 pb-safe">
+          {onOpenDownloadApp && (
+            <button
+              onClick={() => handleItemClick(onOpenDownloadApp)}
+              className="flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-xs text-emerald-300 hover:text-emerald-200 bg-emerald-950/40 hover:bg-emerald-950/70 border border-emerald-800/40 transition font-medium"
+            >
+              <Smartphone className="w-4 h-4 text-emerald-400 shrink-0" />
+              <span className="truncate">Download Android App (.apk)</span>
+            </button>
+          )}
           <button
             onClick={() => handleItemClick(onOpenDashboard)}
             className="flex items-center gap-2.5 w-full px-3 py-2.5 rounded-xl text-xs text-slate-300 hover:text-white hover:bg-slate-900 transition"

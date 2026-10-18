@@ -19,6 +19,7 @@ import {
   Layers,
   Workflow,
   Key,
+  Smartphone,
 } from 'lucide-react';
 import { Sidebar } from '@/components/Sidebar';
 import { ModelSelector } from '@/components/ModelSelector';
@@ -26,6 +27,7 @@ import { MarkdownRenderer } from '@/components/ui/MarkdownRenderer';
 import { AgentReasoningCard } from '@/components/AgentReasoningCard';
 import { UsageDashboardModal } from '@/components/UsageDashboardModal';
 import { SettingsModal } from '@/components/SettingsModal';
+import { DownloadAppModal } from '@/components/DownloadAppModal';
 import { ChatMessage, ModelCapability, ProviderId } from '@/lib/ai/types';
 import { ConversationSummary } from '@/lib/storage';
 
@@ -42,6 +44,7 @@ export default function ChatPage() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isDashboardOpen, setIsDashboardOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isDownloadOpen, setIsDownloadOpen] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [fallbackAlert, setFallbackAlert] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -345,6 +348,7 @@ export default function ChatPage() {
         onDeleteConversation={handleDeleteConversation}
         onOpenSettings={() => setIsSettingsOpen(true)}
         onOpenDashboard={() => setIsDashboardOpen(true)}
+        onOpenDownloadApp={() => setIsDownloadOpen(true)}
         isOpen={isSidebarOpen}
         onToggleOpen={() => setIsSidebarOpen(!isSidebarOpen)}
       />
@@ -404,6 +408,14 @@ export default function ChatPage() {
           </div>
 
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+            <button
+              onClick={() => setIsDownloadOpen(true)}
+              className="p-2 sm:px-2.5 sm:py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-xs text-emerald-300 hover:text-emerald-200 transition flex items-center gap-1.5"
+              title="Download Android APK / Install App"
+            >
+              <Smartphone className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+              <span className="hidden md:inline font-medium">Download App</span>
+            </button>
             <button
               onClick={() => setIsSettingsOpen(true)}
               className="p-2 sm:px-3 sm:py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-xs text-slate-300 transition flex items-center gap-1.5"
@@ -792,6 +804,10 @@ export default function ChatPage() {
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
         onSaved={fetchModels}
+      />
+      <DownloadAppModal
+        isOpen={isDownloadOpen}
+        onClose={() => setIsDownloadOpen(false)}
       />
     </div>
   );

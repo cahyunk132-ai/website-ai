@@ -10,6 +10,11 @@ export const metadata: Metadata = {
     statusBarStyle: 'black-translucent',
     title: 'Hyunk AI Hub',
   },
+  manifest: '/manifest.webmanifest',
+  icons: {
+    icon: '/icon-192.png',
+    apple: '/icon-192.png',
+  },
 };
 
 export const viewport: Viewport = {
