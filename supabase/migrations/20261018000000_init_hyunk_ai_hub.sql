@@ -31,7 +31,7 @@ create table if not exists public.conversations (
   user_id uuid references auth.users(id) on delete cascade,
   title text not null default 'New Conversation',
   selected_model text not null,
-  selected_provider text not null check (selected_provider in ('radox', 'inkstone', 'experiential', 'auto')),
+  selected_provider text not null check (selected_provider in ('radox', 'inkstone', 'auto')),
   created_at timestamp with time zone default timezone('utc'::text, now()) not null,
   updated_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
@@ -104,7 +104,7 @@ create policy "Users can delete messages of their conversations"
 -- 4. PROVIDER SETTINGS (Encrypted Secrets - Admin Only)
 create table if not exists public.provider_settings (
   id uuid default uuid_generate_v4() primary key,
-  provider text unique not null check (provider in ('radox', 'inkstone', 'experiential')),
+  provider text unique not null check (provider in ('radox', 'inkstone')),
   encrypted_api_key text,
   is_enabled boolean default true,
   custom_base_url text,
@@ -122,7 +122,7 @@ create policy "Service role only for provider settings"
 create table if not exists public.model_catalog (
   id text primary key,
   name text not null,
-  provider text not null check (provider in ('radox', 'inkstone', 'experiential')),
+  provider text not null check (provider in ('radox', 'inkstone')),
   context_window integer not null,
   supports_streaming boolean default true,
   supports_vision boolean default false,
@@ -147,7 +147,7 @@ create table if not exists public.usage_events (
   id uuid default uuid_generate_v4() primary key,
   user_id uuid references auth.users(id) on delete set null,
   conversation_id uuid references public.conversations(id) on delete set null,
-  provider text not null check (provider in ('radox', 'inkstone', 'experiential')),
+  provider text not null check (provider in ('radox', 'inkstone')),
   model text not null,
   prompt_tokens integer not null default 0,
   completion_tokens integer not null default 0,

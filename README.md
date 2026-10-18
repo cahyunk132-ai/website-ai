@@ -12,11 +12,10 @@
 
 ## 🌟 Overview & Architecture
 
-**Hyunk AI Hub** connects three frontier AI API gateways into a single high-availability interface:
+**Hyunk AI Hub** connects two frontier AI API gateways into a single high-availability interface:
 
 1. **Radox AI** (`https://radoxai.com/v1`) — High-performance gateway for Claude Opus 4.8, GPT-4o, DeepSeek-V3, and DeepSeek-R1.
 2. **Intern InkStone** (`https://chat.intern-ai.org.cn/api/v1`) — Shanghai AI Laboratory flagship research models (InternLM Latest, InternLM 2.5 7B, InternVL 2.5 Multimodal).
-3. **Experiential Labs** (`https://api.experientiallabs.ai/v1`) — Enterprise backup gateway for hosted Claude 3.5 Sonnet, GPT-4o, and Llama 3.3 70B.
 
 ```
                   ┌────────────────────────────────────────┐
@@ -28,17 +27,17 @@
                   ┌────────────────────────────────────────┐
                   │       Route Execution & Fallback       │
                   │        (src/lib/ai/router.ts)          │
-                  └───────┬──────────────┬───────────────┬─┘
-                          │              │               │
-            [Primary]     │    [Fallback]│     [Backup]  │
-                          ▼              ▼               ▼
-                   ┌──────────────┐┌──────────────┐┌──────────────┐
-                   │   Radox AI   ││Intern InkStone││ Experiential │
-                   │    (v1)      ││   (v1 API)   ││   Labs (v1)  │
-                   └──────────────┘└──────────────┘└──────────────┘
-                          │              │               │
-                          └──────────────┼───────────────┘
-                                         ▼
+                  └───────┬──────────────────────┬─────────┘
+                          │                      │
+             [Primary]    │                      │  [Fallback]
+                          ▼                      ▼
+                   ┌──────────────┐      ┌──────────────┐
+                   │   Radox AI   │ ◄──► │Intern InkStone│
+                   │    (v1)      │      │   (v1 API)   │
+                   └──────────────┘      └──────────────┘
+                          │                      │
+                          └───────────┬──────────┘
+                                      ▼
                   ┌────────────────────────────────────────┐
                   │    Telemetry & Quota Health Tracker    │
                   │    • Tokens / Cost / HTTP 429 Status   │
@@ -105,7 +104,6 @@ Fill in your provider API keys and encryption key:
 # AI Providers (Server-side only)
 RADOX_API_KEY=your_radox_api_key_here
 INKSTONE_API_KEY=your_inkstone_api_key_here
-EXPERIENTIAL_API_KEY=your_experiential_api_key_here
 
 # Supabase (Optional for memory/local dev mode)
 SUPABASE_URL=https://your-project.supabase.co
@@ -171,8 +169,7 @@ website-ai/
 │       │   ├── router.ts              # Fallback router engine
 │       │   └── providers/
 │       │       ├── radox.ts           # Radox AI adapter
-│       │       ├── inkstone.ts        # Intern InkStone adapter
-│       │       └── experiential.ts    # Experiential Labs adapter
+│       │       └── inkstone.ts        # Intern InkStone adapter
 │       ├── crypto.ts                  # AES-256-GCM encryption & redaction
 │       └── storage.ts                 # Database & in-memory persistence
 ├── supabase/
@@ -198,7 +195,7 @@ website-ai/
 
 1. Push your repository to GitHub (`cahyunk132-ai/website-ai`).
 2. Import the project into [Vercel](https://vercel.com).
-3. Set the environment variables in Vercel Project Settings (`RADOX_API_KEY`, `INKSTONE_API_KEY`, `EXPERIENTIAL_API_KEY`, `APP_ENCRYPTION_KEY`, `SUPABASE_URL`, etc.).
+3. Set the environment variables in Vercel Project Settings (`RADOX_API_KEY`, `INKSTONE_API_KEY`, `APP_ENCRYPTION_KEY`, `SUPABASE_URL`, etc.).
 4. Click **Deploy**.
 
 ---

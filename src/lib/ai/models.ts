@@ -17,8 +17,8 @@ export const VERIFIED_MODELS: ModelCapability[] = [
     inputPricePerMillion: 15.0,
     outputPricePerMillion: 75.0,
     isFreeQuotaEligible: false,
-    fallbackModelId: 'experiential-claude-3-5-sonnet',
-    fallbackProvider: 'experiential',
+    fallbackModelId: 'intern-latest',
+    fallbackProvider: 'inkstone',
     description: 'Premier frontier reasoning and coding model via Radox AI gateway.',
     tags: ['Flagship', 'Coding', 'Reasoning', 'Vision'],
   },
@@ -33,8 +33,8 @@ export const VERIFIED_MODELS: ModelCapability[] = [
     inputPricePerMillion: 2.5,
     outputPricePerMillion: 10.0,
     isFreeQuotaEligible: true,
-    fallbackModelId: 'experiential-gpt-4o',
-    fallbackProvider: 'experiential',
+    fallbackModelId: 'internvl2.5-78b',
+    fallbackProvider: 'inkstone',
     description: 'Omni multimodal model with high speed and audio/visual understanding.',
     tags: ['Multimodal', 'Fast', 'General'],
   },
@@ -137,55 +137,6 @@ export const VERIFIED_MODELS: ModelCapability[] = [
     tags: ['Vision', 'Research', 'Multimodal'],
   },
 
-  // --- Experiential Labs Models ---
-  {
-    id: 'experiential-gpt-4o',
-    name: 'GPT-4o (Experiential Labs)',
-    provider: 'experiential',
-    contextWindow: 128000,
-    supportsStreaming: true,
-    supportsVision: true,
-    supportsTools: true,
-    inputPricePerMillion: 2.5,
-    outputPricePerMillion: 10.0,
-    isFreeQuotaEligible: false,
-    fallbackModelId: 'gpt-4o',
-    fallbackProvider: 'radox',
-    description: 'High availability OpenAI gateway provided via Experiential Labs platform.',
-    tags: ['High Availability', 'Enterprise', 'General'],
-  },
-  {
-    id: 'experiential-claude-3-5-sonnet',
-    name: 'Claude 3.5 Sonnet (Experiential Labs)',
-    provider: 'experiential',
-    contextWindow: 200000,
-    supportsStreaming: true,
-    supportsVision: true,
-    supportsTools: true,
-    inputPricePerMillion: 3.0,
-    outputPricePerMillion: 15.0,
-    isFreeQuotaEligible: false,
-    fallbackModelId: 'claude-opus-4.8',
-    fallbackProvider: 'radox',
-    description: 'Anthropic Claude 3.5 Sonnet gateway for high-precision autonomous code generation.',
-    tags: ['Top Coding', 'Vision', 'Enterprise'],
-  },
-  {
-    id: 'experiential-llama-3.3-70b',
-    name: 'Llama 3.3 70B (Experiential Labs)',
-    provider: 'experiential',
-    contextWindow: 128000,
-    supportsStreaming: true,
-    supportsVision: false,
-    supportsTools: true,
-    inputPricePerMillion: 0.8,
-    outputPricePerMillion: 0.8,
-    isFreeQuotaEligible: true,
-    fallbackModelId: 'intern-latest',
-    fallbackProvider: 'inkstone',
-    description: 'Meta open weights flagship instruction model with 128K context.',
-    tags: ['Open Source', 'Fast', 'Coding'],
-  },
 ];
 
 export function getModelById(modelId: string): ModelCapability | undefined {
@@ -210,9 +161,7 @@ export function getFallbackForModel(model: ModelCapability): {
   // Generic fallback if none explicitly set
   if (model.provider === 'radox') {
     return { targetModelId: 'intern-latest', targetProvider: 'inkstone' };
-  } else if (model.provider === 'inkstone') {
-    return { targetModelId: 'experiential-llama-3.3-70b', targetProvider: 'experiential' };
   } else {
-    return { targetModelId: 'intern-latest', targetProvider: 'inkstone' };
+    return { targetModelId: 'deepseek-chat', targetProvider: 'radox' };
   }
 }

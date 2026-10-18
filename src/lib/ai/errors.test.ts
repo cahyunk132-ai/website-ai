@@ -26,7 +26,7 @@ describe('Error Normalization', () => {
   });
 
   it('normalizes 401 authentication errors', () => {
-    const error = normalizeProviderError('Invalid API key provided', 'experiential', 401);
+    const error = normalizeProviderError('Invalid API key provided', 'inkstone', 401);
     expect(error).toBeInstanceOf(AuthenticationError);
     expect(error.code).toBe('AUTHENTICATION_FAILED');
   });

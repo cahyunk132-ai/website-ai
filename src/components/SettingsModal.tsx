@@ -107,13 +107,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
         <div className="p-6 space-y-5">
           {/* Tabs */}
           <div className="flex border-b border-slate-800 pb-2 gap-2 text-xs">
-            {(['radox', 'inkstone', 'experiential'] as ProviderId[]).map((p) => {
-              const label =
-                p === 'radox'
-                  ? 'Radox AI'
-                  : p === 'inkstone'
-                  ? 'Intern InkStone'
-                  : 'Experiential Labs';
+            {(['radox', 'inkstone'] as ProviderId[]).map((p) => {
+              const label = p === 'radox' ? 'Radox AI' : 'Intern InkStone';
               const isConfigured = settings[p]?.isConfigured;
 
               return (
@@ -159,9 +154,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
                 placeholder={
                   activeTab === 'radox'
                     ? 'Enter Radox AI Key (cc_... or sk-...)'
-                    : activeTab === 'inkstone'
-                    ? 'Enter Intern InkStone Bearer Token'
-                    : 'Enter Experiential Labs API Key'
+                    : 'Enter Intern InkStone Bearer Token'
                 }
                 value={inputKey}
                 onChange={(e) => setInputKey(e.target.value)}
@@ -170,7 +163,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
               <p className="text-[11px] text-slate-500">
                 {activeTab === 'radox' && 'Get keys from https://radoxai.com/'}
                 {activeTab === 'inkstone' && 'Get keys from https://discovery.intern-ai.org.cn/'}
-                {activeTab === 'experiential' && 'Get keys from https://platform.experientiallabs.ai/'}
               </p>
             </div>
 

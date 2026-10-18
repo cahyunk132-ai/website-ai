@@ -6,7 +6,6 @@ import { NextResponse } from 'next/server';
 import { getAllProviderStats } from '@/lib/ai/usage';
 import { radoxAdapter } from '@/lib/ai/providers/radox';
 import { inkstoneAdapter } from '@/lib/ai/providers/inkstone';
-import { experientialAdapter } from '@/lib/ai/providers/experiential';
 
 export async function GET() {
   const stats = getAllProviderStats();
@@ -14,7 +13,6 @@ export async function GET() {
   // Refresh configured state
   stats.radox.isConfigured = radoxAdapter.isConfigured();
   stats.inkstone.isConfigured = inkstoneAdapter.isConfigured();
-  stats.experiential.isConfigured = experientialAdapter.isConfigured();
 
   // Aggregate totals
   const totalRequests = Object.values(stats).reduce((acc, p) => acc + p.totalRequests, 0);
@@ -31,7 +29,7 @@ export async function GET() {
     system: {
       timestamp: new Date().toISOString(),
       primaryProvider: 'radox',
-      fallbackPriority: ['radox', 'inkstone', 'experiential'],
+      fallbackPriority: ['radox', 'inkstone'],
     },
   });
 }

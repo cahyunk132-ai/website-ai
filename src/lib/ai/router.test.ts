@@ -2,7 +2,6 @@ import { describe, it, expect } from 'vitest';
 import { ProviderRouter } from './router';
 import { RadoxAdapter } from './providers/radox';
 import { InkstoneAdapter } from './providers/inkstone';
-import { ExperientialAdapter } from './providers/experiential';
 import { QuotaExceededError } from './errors';
 
 describe('Provider Router & Automatic Fallback', () => {
@@ -13,10 +12,10 @@ describe('Provider Router & Automatic Fallback', () => {
     expect(plan.primaryProvider).toBe('radox');
     expect(plan.primaryModel).toBe('claude-opus-4.8');
     expect(plan.fallbackChain.length).toBeGreaterThan(0);
-    expect(plan.fallbackChain.some((f) => f.provider === 'experiential')).toBe(true);
+    expect(plan.fallbackChain.some((f) => f.provider === 'inkstone')).toBe(true);
   });
 
-  it('automatically falls back to secondary provider when primary quota is exhausted', async () => {
+  it('automatically falls back to InkStone when Radox quota is exhausted', async () => {
     // Mock failing primary adapter
     const mockRadox = new RadoxAdapter('dummy-key');
     mockRadox.chatCompletion = async () => {
@@ -34,12 +33,9 @@ describe('Provider Router & Automatic Fallback', () => {
       };
     };
 
-    const mockExperiential = new ExperientialAdapter();
-
     const router = new ProviderRouter({
       radox: mockRadox,
       inkstone: mockInkstone,
-      experiential: mockExperiential,
     });
 
     const result = await router.completeChat({
@@ -50,6 +46,40 @@ describe('Provider Router & Automatic Fallback', () => {
 
     expect(result.text).toBe('Hello from InkStone fallback!');
     expect(result.provider).toBe('inkstone');
+    expect(result.isFallback).toBe(true);
+  });
+
+  it('automatically falls back to Radox when InkStone quota is exhausted', async () => {
+    // Mock failing InkStone adapter
+    const mockInkstone = new InkstoneAdapter('dummy-key');
+    mockInkstone.chatCompletion = async () => {
+      throw new QuotaExceededError('inkstone', 'Rate limit or quota reached on InkStone.');
+    };
+
+    // Mock successful Radox adapter
+    const mockRadox = new RadoxAdapter('dummy-key');
+    mockRadox.chatCompletion = async (options) => {
+      return {
+        text: 'Hello from Radox fallback!',
+        model: options.model,
+        provider: 'radox',
+        usage: { promptTokens: 15, completionTokens: 15, totalTokens: 30 },
+      };
+    };
+
+    const router = new ProviderRouter({
+      radox: mockRadox,
+      inkstone: mockInkstone,
+    });
+
+    const result = await router.completeChat({
+      messages: [{ role: 'user', content: 'Fallback to Radox' }],
+      model: 'intern-latest',
+      provider: 'inkstone',
+    });
+
+    expect(result.text).toBe('Hello from Radox fallback!');
+    expect(result.provider).toBe('radox');
     expect(result.isFallback).toBe(true);
   });
 });

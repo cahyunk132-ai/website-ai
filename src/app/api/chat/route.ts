@@ -16,7 +16,7 @@ const chatRequestSchema = z.object({
     })
   ).min(1),
   model: z.string().min(1),
-  provider: z.enum(['radox', 'inkstone', 'experiential', 'auto']).optional(),
+  provider: z.enum(['radox', 'inkstone', 'auto']).optional(),
   temperature: z.number().min(0).max(2).optional(),
   conversationId: z.string().optional(),
 });

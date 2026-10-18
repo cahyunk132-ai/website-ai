@@ -33,19 +33,6 @@ const providerStats: Record<ProviderId, ProviderHealth> = {
     quotaStatus: 'unknown',
     quotaSource: 'estimated',
   },
-  experiential: {
-    provider: 'experiential',
-    name: 'Experiential Labs',
-    baseUrl: 'https://api.experientiallabs.ai/v1',
-    isConfigured: false,
-    isHealthy: true,
-    totalRequests: 0,
-    failedRequests: 0,
-    tokens: { prompt: 0, completion: 0, total: 0 },
-    estimatedCostUsd: 0,
-    quotaStatus: 'unknown',
-    quotaSource: 'estimated',
-  },
 };
 
 /**

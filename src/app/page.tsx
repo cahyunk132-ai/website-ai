@@ -398,7 +398,7 @@ export default function ChatPage() {
               </div>
               <h2 className="text-xl font-bold text-slate-100 mb-2">Hyunk AI Hub</h2>
               <p className="text-xs text-slate-400 mb-6 leading-relaxed">
-                Connect seamlessly to Radox AI, Intern InkStone, and Experiential Labs with automatic quota fallback and live telemetry.
+                Connect seamlessly to Radox AI and Intern InkStone with automatic quota fallback and live telemetry.
               </p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 w-full text-left text-xs">
                 <button

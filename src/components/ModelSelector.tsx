@@ -88,16 +88,6 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
             >
               InkStone
             </button>
-            <button
-              onClick={() => onSelectProvider('experiential')}
-              className={`px-2.5 py-1 rounded-lg text-xs font-medium transition ${
-                selectedProvider === 'experiential'
-                  ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40'
-                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
-              }`}
-            >
-              Experiential
-            </button>
           </div>
 
           {/* Model Items */}

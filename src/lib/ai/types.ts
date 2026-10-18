@@ -2,7 +2,7 @@
  * Hyunk AI Hub - Core AI Types & Definitions
  */
 
-export type ProviderId = 'radox' | 'inkstone' | 'experiential';
+export type ProviderId = 'radox' | 'inkstone';
 
 export interface ChatMessage {
   id: string;

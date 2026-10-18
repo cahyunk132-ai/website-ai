@@ -10,24 +10,21 @@ import { maskApiKey } from '@/lib/crypto';
 import { saveProviderApiKey, getProviderApiKey } from '@/lib/storage';
 import { radoxAdapter, RadoxAdapter } from '@/lib/ai/providers/radox';
 import { inkstoneAdapter, InkstoneAdapter } from '@/lib/ai/providers/inkstone';
-import { experientialAdapter, ExperientialAdapter } from '@/lib/ai/providers/experiential';
 
 const updateSettingsSchema = z.object({
-  provider: z.enum(['radox', 'inkstone', 'experiential']),
+  provider: z.enum(['radox', 'inkstone']),
   apiKey: z.string().min(5),
 });
 
 export async function GET() {
-  const providers: ProviderId[] = ['radox', 'inkstone', 'experiential'];
+  const providers: ProviderId[] = ['radox', 'inkstone'];
   const result: Record<string, { isConfigured: boolean; maskedKey: string; hasEnvKey: boolean }> = {};
 
   for (const p of providers) {
     const envKey =
       p === 'radox'
         ? process.env.RADOX_API_KEY
-        : p === 'inkstone'
-        ? process.env.INKSTONE_API_KEY
-        : process.env.EXPERIENTIAL_API_KEY;
+        : process.env.INKSTONE_API_KEY;
 
     const storedKey = await getProviderApiKey(p);
     const activeKey = storedKey || envKey;
@@ -63,9 +60,6 @@ export async function POST(req: NextRequest) {
       isHealthy = await adapter.checkHealth();
     } else if (provider === 'inkstone') {
       const adapter = new InkstoneAdapter(apiKey);
-      isHealthy = await adapter.checkHealth();
-    } else if (provider === 'experiential') {
-      const adapter = new ExperientialAdapter(apiKey);
       isHealthy = await adapter.checkHealth();
     }
 

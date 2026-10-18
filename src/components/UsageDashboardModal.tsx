@@ -213,15 +213,11 @@ export const UsageDashboardModal: React.FC<UsageDashboardModalProps> = ({ isOpen
             <h4 className="font-semibold text-slate-300">Configured Fallback Priority Flow</h4>
             <div className="flex flex-wrap items-center gap-2 text-xs">
               <span className="px-3 py-1 rounded-lg bg-cyan-500/20 border border-cyan-500/40 text-cyan-300 font-medium">
-                1. Radox AI (Primary)
+                1. Radox AI (Primary Gateway)
               </span>
-              <span className="text-slate-500">➔</span>
+              <span className="text-slate-500">⇄</span>
               <span className="px-3 py-1 rounded-lg bg-blue-500/20 border border-blue-500/40 text-blue-300 font-medium">
-                2. Intern InkStone (Academic Fallback)
-              </span>
-              <span className="text-slate-500">➔</span>
-              <span className="px-3 py-1 rounded-lg bg-purple-500/20 border border-purple-500/40 text-purple-300 font-medium">
-                3. Experiential Labs (Enterprise Backup)
+                2. Intern InkStone (Secondary Fallback)
               </span>
             </div>
             <p className="text-[11px] text-slate-500 leading-relaxed">

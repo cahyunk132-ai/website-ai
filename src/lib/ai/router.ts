@@ -12,7 +12,6 @@ import {
 import { getModelById, getFallbackForModel, VERIFIED_MODELS } from './models';
 import { radoxAdapter, RadoxAdapter } from './providers/radox';
 import { inkstoneAdapter, InkstoneAdapter } from './providers/inkstone';
-import { experientialAdapter, ExperientialAdapter } from './providers/experiential';
 import {
   AIProviderError,
   QuotaExceededError,
@@ -37,12 +36,10 @@ export class ProviderRouter {
   constructor(customAdapters?: {
     radox?: RadoxAdapter;
     inkstone?: InkstoneAdapter;
-    experiential?: ExperientialAdapter;
   }) {
     this.adapters = new Map();
     this.adapters.set('radox', customAdapters?.radox || radoxAdapter);
     this.adapters.set('inkstone', customAdapters?.inkstone || inkstoneAdapter);
-    this.adapters.set('experiential', customAdapters?.experiential || experientialAdapter);
   }
 
   getAdapter(provider: ProviderId): ProviderAdapter {
@@ -76,7 +73,7 @@ export class ProviderRouter {
     }
 
     // Add remaining configured providers as safety net
-    const allProviders: ProviderId[] = ['radox', 'inkstone', 'experiential'];
+    const allProviders: ProviderId[] = ['radox', 'inkstone'];
     for (const p of allProviders) {
       if (p !== primaryProvider && !fallbackChain.some((f) => f.provider === p)) {
         const defaultModel = VERIFIED_MODELS.find((m) => m.provider === p)?.id || 'intern-latest';

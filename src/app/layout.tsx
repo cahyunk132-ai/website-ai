@@ -4,7 +4,7 @@ import './globals.css';
 export const metadata: Metadata = {
   title: 'Hyunk AI Hub - Multi-Provider AI Platform',
   description:
-    'Unified interface for Radox AI, Intern InkStone, and Experiential Labs with automatic quota fallback and real-time streaming.',
+    'Unified interface for Radox AI and Intern InkStone with automatic quota fallback and real-time streaming.',
 };
 
 export default function RootLayout({
