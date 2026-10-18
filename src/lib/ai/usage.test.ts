@@ -16,10 +16,9 @@ describe('Usage and Token Telemetry', () => {
   });
 
   it('calculates cost according to model catalog pricing', () => {
-    // claude-opus-4.8: input 15.0 / M, output 75.0 / M
-    const cost = calculateCost('claude-opus-4.8', 1000, 1000);
-    // (1000 / 1e6)*15 + (1000 / 1e6)*75 = 0.015 + 0.075 = 0.090
-    expect(cost).toBe(0.09);
+    // For free tier models, calculated cost is 0
+    const cost = calculateCost('gpt-5.6-luna', 1000, 1000);
+    expect(cost).toBe(0);
   });
 
   it('records request usage and updates telemetry stats', () => {

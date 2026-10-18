@@ -37,7 +37,46 @@ export class RadoxAdapter implements ProviderAdapter {
   }
 
   async listModels(): Promise<ModelCapability[]> {
-    return getModelsByProvider(this.id);
+    const staticModels = getModelsByProvider(this.id);
+    const apiKey = this.getApiKey();
+    if (!apiKey) return staticModels;
+
+    try {
+      const res = await fetch(`${this.baseUrl}/models`, {
+        headers: { Authorization: `Bearer ${apiKey}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data.data)) {
+          const merged = [...staticModels];
+          for (const item of data.data) {
+            const mId = item.id;
+            if (!merged.some((m) => m.id === mId)) {
+              merged.push({
+                id: mId,
+                name: `${mId} (Radox Free)`,
+                provider: this.id,
+                contextWindow: 128000,
+                supportsStreaming: true,
+                supportsVision: true,
+                supportsTools: true,
+                inputPricePerMillion: 0.0,
+                outputPricePerMillion: 0.0,
+                isFreeQuotaEligible: true,
+                fallbackModelId: 'intern-latest',
+                fallbackProvider: 'inkstone',
+                description: `Radox AI model ${mId} with free tier support.`,
+                tags: ['Free Tier', 'Radox'],
+              });
+            }
+          }
+          return merged;
+        }
+      }
+    } catch {
+      // Fallback to static
+    }
+    return staticModels;
   }
 
   async chatCompletion(options: ChatOptions): Promise<ChatCompletionResult> {

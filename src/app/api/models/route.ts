@@ -13,7 +13,11 @@ export async function GET() {
     inkstone: inkstoneAdapter.isConfigured(),
   };
 
-  const modelsWithConfigState = VERIFIED_MODELS.map((model) => ({
+  const radoxModels = await radoxAdapter.listModels();
+  const inkstoneModels = await inkstoneAdapter.listModels();
+  const allModels = [...radoxModels, ...inkstoneModels];
+
+  const modelsWithConfigState = allModels.map((model) => ({
     ...model,
     isProviderConfigured: configuredProviders[model.provider],
   }));

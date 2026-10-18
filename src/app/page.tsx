@@ -29,7 +29,7 @@ export default function ChatPage() {
   const [input, setInput] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
   const [models, setModels] = useState<ModelCapability[]>([]);
-  const [selectedModelId, setSelectedModelId] = useState<string>('gemini-3.7-flash');
+  const [selectedModelId, setSelectedModelId] = useState<string>('gpt-5.6-luna');
   const [selectedProvider, setSelectedProvider] = useState<'auto' | ProviderId>('auto');
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isDashboardOpen, setIsDashboardOpen] = useState(false);
@@ -361,10 +361,10 @@ export default function ChatPage() {
             <Zap className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
             <span className="font-semibold text-emerald-300">Free Tier Models:</span>
           </div>
-          <div className="flex items-center gap-1.5 overflow-x-auto">
+          <div className="flex items-center gap-1.5 overflow-x-auto py-0.5">
             {models
               .filter((m) => m.isFreeQuotaEligible)
-              .slice(0, 6)
+              .slice(0, 15)
               .map((m) => {
                 const isActive = selectedModelId === m.id;
                 return (
