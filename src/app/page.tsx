@@ -12,6 +12,7 @@ import {
   AlertCircle,
   ShieldAlert,
   Info,
+  Zap,
 } from 'lucide-react';
 import { Sidebar } from '@/components/Sidebar';
 import { ModelSelector } from '@/components/ModelSelector';
@@ -28,7 +29,7 @@ export default function ChatPage() {
   const [input, setInput] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
   const [models, setModels] = useState<ModelCapability[]>([]);
-  const [selectedModelId, setSelectedModelId] = useState<string>('claude-opus-4.8');
+  const [selectedModelId, setSelectedModelId] = useState<string>('gemini-3.7-flash');
   const [selectedProvider, setSelectedProvider] = useState<'auto' | ProviderId>('auto');
   const [isSidebarOpen, setIsSidebarOpen] = useState(true);
   const [isDashboardOpen, setIsDashboardOpen] = useState(false);
@@ -75,7 +76,8 @@ export default function ChatPage() {
         const data = await res.json();
         setModels(data.models || []);
         if (data.models && data.models.length > 0) {
-          setSelectedModelId(data.models[0].id);
+          const freeModel = data.models.find((m: any) => m.isFreeQuotaEligible);
+          setSelectedModelId(freeModel ? freeModel.id : data.models[0].id);
         }
       }
     } catch {
@@ -352,6 +354,36 @@ export default function ChatPage() {
             </button>
           </div>
         </header>
+
+        {/* Quick Free Tier Model Switcher Bar */}
+        <div className="px-4 py-2 border-b border-slate-800/60 bg-slate-900/50 flex items-center justify-between text-xs overflow-x-auto gap-2">
+          <div className="flex items-center gap-1.5 shrink-0">
+            <Zap className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+            <span className="font-semibold text-emerald-300">Free Tier Models:</span>
+          </div>
+          <div className="flex items-center gap-1.5 overflow-x-auto">
+            {models
+              .filter((m) => m.isFreeQuotaEligible)
+              .slice(0, 6)
+              .map((m) => {
+                const isActive = selectedModelId === m.id;
+                return (
+                  <button
+                    key={m.id}
+                    onClick={() => setSelectedModelId(m.id)}
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-medium transition shrink-0 flex items-center gap-1 ${
+                      isActive
+                        ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/50 shadow-sm'
+                        : 'bg-slate-900/90 text-slate-400 hover:text-slate-200 hover:bg-slate-800 border border-slate-800/80'
+                    }`}
+                  >
+                    {isActive && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />}
+                    <span>{m.name.replace(' (Radox Free)', '').replace(' (InkStone)', '').replace(' (Radox)', '')}</span>
+                  </button>
+                );
+              })}
+          </div>
+        </div>
 
         {/* Fallback Alert Banner */}
         {fallbackAlert && (
