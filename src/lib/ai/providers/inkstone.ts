@@ -178,14 +178,17 @@ export class InkstoneAdapter implements ProviderAdapter {
       throw normalizeProviderError(new Error('Intern InkStone stream response body is null'), this.id);
     }
 
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder('utf-8');
+    let reader: ReadableStreamDefaultReader<Uint8Array>;
+    let decoder = new TextDecoder('utf-8');
     let accumulatedText = '';
     let promptTokens = 0;
     let completionTokens = 0;
     let buffer = '';
+    let inReasoningPhase = false;
+    let reasoningClosed = false;
 
     try {
+      reader = res.body.getReader();
       while (true) {
         const { value, done } = await reader.read();
         if (done) break;
@@ -201,6 +204,11 @@ export class InkstoneAdapter implements ProviderAdapter {
           if (trimmed.startsWith('data: ')) {
             const dataStr = trimmed.slice(6);
             if (dataStr === '[DONE]') {
+              if (inReasoningPhase && !reasoningClosed) {
+                reasoningClosed = true;
+                accumulatedText += '\n</thought>\n\n';
+                onChunk({ text: '\n</thought>\n\n', done: false, model: options.model, provider: this.id });
+              }
               onChunk({ text: '', done: true, model: options.model, provider: this.id });
               continue;
             }
@@ -209,7 +217,22 @@ export class InkstoneAdapter implements ProviderAdapter {
               const chunkJson = JSON.parse(dataStr);
               const deltaContent = chunkJson.choices?.[0]?.delta?.content || '';
               const deltaReasoning = chunkJson.choices?.[0]?.delta?.reasoning_content || '';
-              const delta = deltaContent || deltaReasoning;
+              
+              let delta = '';
+              if (deltaReasoning) {
+                if (!inReasoningPhase) {
+                  inReasoningPhase = true;
+                  delta += '<thought>\n';
+                }
+                delta += deltaReasoning;
+              } else if (deltaContent) {
+                if (inReasoningPhase && !reasoningClosed) {
+                  reasoningClosed = true;
+                  delta += '\n</thought>\n\n';
+                }
+                delta += deltaContent;
+              }
+
               if (chunkJson.usage) {
                 promptTokens = chunkJson.usage.prompt_tokens ?? promptTokens;
                 completionTokens = chunkJson.usage.completion_tokens ?? completionTokens;

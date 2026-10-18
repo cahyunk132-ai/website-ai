@@ -13,10 +13,16 @@ import {
   ShieldAlert,
   Info,
   Zap,
+  Bot,
+  Brain,
+  Cpu,
+  Layers,
+  Workflow,
 } from 'lucide-react';
 import { Sidebar } from '@/components/Sidebar';
 import { ModelSelector } from '@/components/ModelSelector';
 import { MarkdownRenderer } from '@/components/ui/MarkdownRenderer';
+import { AgentReasoningCard } from '@/components/AgentReasoningCard';
 import { UsageDashboardModal } from '@/components/UsageDashboardModal';
 import { SettingsModal } from '@/components/SettingsModal';
 import { ChatMessage, ModelCapability, ProviderId } from '@/lib/ai/types';
@@ -28,6 +34,7 @@ export default function ChatPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
+  const [mode, setMode] = useState<'chat' | 'agent'>('chat');
   const [models, setModels] = useState<ModelCapability[]>([]);
   const [selectedModelId, setSelectedModelId] = useState<string>('gpt-5.6-luna');
   const [selectedProvider, setSelectedProvider] = useState<'auto' | ProviderId>('auto');
@@ -224,6 +231,7 @@ export default function ChatPage() {
           model: selectedModelId,
           provider: selectedProvider === 'auto' ? undefined : selectedProvider,
           conversationId: activeConvId || undefined,
+          mode,
         }),
         signal: abortControllerRef.current.signal,
       });
@@ -346,6 +354,39 @@ export default function ChatPage() {
               onSelectModel={setSelectedModelId}
               onSelectProvider={setSelectedProvider}
             />
+
+            {/* Mode Switcher: Chat vs Agent Mode */}
+            <div className="flex items-center p-0.5 rounded-xl bg-slate-900 border border-slate-800 shadow-inner">
+              <button
+                type="button"
+                onClick={() => setMode('chat')}
+                className={`px-2.5 py-1 rounded-lg text-xs font-medium transition flex items-center gap-1.5 ${
+                  mode === 'chat'
+                    ? 'bg-slate-800 text-slate-100 shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+                title="Standard Conversational Chat Mode"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
+                <span>Chat</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setMode('agent')}
+                className={`px-3 py-1 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 ${
+                  mode === 'agent'
+                    ? 'bg-gradient-to-r from-violet-600 to-indigo-600 text-white shadow-md shadow-violet-600/30 ring-1 ring-violet-400/50'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+                title="Autonomous Agent Mode with Reasoning & Tool Actions"
+              >
+                <Bot className="w-3.5 h-3.5 text-violet-300" />
+                <span>Agent Mode</span>
+                {mode === 'agent' && (
+                  <span className="w-1.5 h-1.5 rounded-full bg-violet-300 animate-ping" />
+                )}
+              </button>
+            </div>
           </div>
 
           <div className="flex items-center gap-2">
@@ -403,6 +444,46 @@ export default function ChatPage() {
           </div>
         </div>
 
+        {/* Agent Mode Active Banner & Directives */}
+        {mode === 'agent' && (
+          <div className="px-4 py-2 border-b border-violet-500/30 bg-gradient-to-r from-violet-950/70 via-slate-950 to-slate-950 flex flex-wrap items-center justify-between text-xs gap-2 animate-fadeIn">
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-violet-900/60 border border-violet-500/40 text-violet-200 text-[11px] font-bold">
+                <Brain className="w-3.5 h-3.5 text-violet-300" />
+                <span>AGENT ENGINE ACTIVE</span>
+              </div>
+              <span className="hidden md:inline text-slate-400 text-[11px]">
+                Autonomous multi-step reasoning, tool execution, and self-verification.
+              </span>
+            </div>
+
+            <div className="flex items-center gap-1.5 overflow-x-auto py-0.5 text-[11px]">
+              <span className="text-slate-500 font-medium">Directives:</span>
+              <button
+                type="button"
+                onClick={() => setInput((prev) => (prev ? `${prev}\n\n[Objective: Break down into execution plan and implement step-by-step]` : '[Objective: Break down into execution plan and implement step-by-step] '))}
+                className="px-2 py-0.5 rounded-md bg-slate-900 hover:bg-violet-900/40 text-slate-300 hover:text-violet-200 border border-slate-800 transition"
+              >
+                🎯 Plan & Execute
+              </button>
+              <button
+                type="button"
+                onClick={() => setInput((prev) => (prev ? `${prev}\n\n[Objective: Full production code with edge cases and verification]` : '[Objective: Full production code with edge cases and verification] '))}
+                className="px-2 py-0.5 rounded-md bg-slate-900 hover:bg-violet-900/40 text-slate-300 hover:text-violet-200 border border-slate-800 transition"
+              >
+                💻 Code & Verify
+              </button>
+              <button
+                type="button"
+                onClick={() => setInput((prev) => (prev ? `${prev}\n\n[Objective: Deep research analysis and architectural breakdown]` : '[Objective: Deep research analysis and architectural breakdown] '))}
+                className="px-2 py-0.5 rounded-md bg-slate-900 hover:bg-violet-900/40 text-slate-300 hover:text-violet-200 border border-slate-800 transition"
+              >
+                🔍 Deep Research
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Fallback Alert Banner */}
         {fallbackAlert && (
           <div className="bg-amber-950/70 border-b border-amber-800/60 px-4 py-2.5 flex items-center justify-between text-xs text-amber-200 animate-fadeIn">
@@ -442,33 +523,90 @@ export default function ChatPage() {
           className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6"
         >
           {messages.length === 0 ? (
-            <div className="h-full flex flex-col items-center justify-center text-center max-w-md mx-auto p-4">
-              <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-cyan-600 to-blue-500 flex items-center justify-center text-white shadow-xl shadow-cyan-500/20 mb-4">
-                <Sparkles className="w-7 h-7" />
+            <div className="h-full flex flex-col items-center justify-center text-center max-w-lg mx-auto p-4">
+              <div
+                className={`w-14 h-14 rounded-2xl flex items-center justify-center text-white shadow-xl mb-4 transition ${
+                  mode === 'agent'
+                    ? 'bg-gradient-to-tr from-violet-600 via-indigo-600 to-cyan-500 shadow-violet-500/25 ring-2 ring-violet-500/30 animate-pulse'
+                    : 'bg-gradient-to-tr from-cyan-600 to-blue-500 shadow-cyan-500/20'
+                }`}
+              >
+                {mode === 'agent' ? <Bot className="w-7 h-7" /> : <Sparkles className="w-7 h-7" />}
               </div>
-              <h2 className="text-xl font-bold text-slate-100 mb-2">Hyunk AI Hub</h2>
+              <h2 className="text-xl font-bold text-slate-100 mb-2">
+                {mode === 'agent' ? 'Autonomous Agent Command Center' : 'Hyunk AI Hub'}
+              </h2>
               <p className="text-xs text-slate-400 mb-6 leading-relaxed">
-                Connect seamlessly to Radox AI and Intern InkStone with automatic quota fallback and live telemetry.
+                {mode === 'agent'
+                  ? 'Autonomous reasoning engine equipped with planning, tool invocation, and full implementation pipelines across Radox AI and Intern InkStone.'
+                  : 'Connect seamlessly to Radox AI and Intern InkStone with automatic quota fallback and live telemetry.'}
               </p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 w-full text-left text-xs">
-                <button
-                  onClick={() => handleSend('Explain the difference between Radox AI and InternLM models')}
-                  className="p-3 rounded-xl bg-slate-900 border border-slate-800/80 hover:border-cyan-500/50 hover:bg-slate-800/60 text-slate-300 transition"
-                >
-                  <p className="font-semibold text-slate-100 mb-1">Architecture Comparison</p>
-                  <p className="text-[11px] text-slate-400">Compare provider features and latencies</p>
-                </button>
-                <button
-                  onClick={() => handleSend('Write a high-performance TypeScript microservice for streaming AI completions')}
-                  className="p-3 rounded-xl bg-slate-900 border border-slate-800/80 hover:border-cyan-500/50 hover:bg-slate-800/60 text-slate-300 transition"
-                >
-                  <p className="font-semibold text-slate-100 mb-1">TypeScript Microservice</p>
-                  <p className="text-[11px] text-slate-400">Build high-throughput SSE proxy</p>
-                </button>
+                {mode === 'agent' ? (
+                  <>
+                    <button
+                      onClick={() => handleSend('Architect a scalable event-driven distributed system in TypeScript with Redis pub/sub and resilient retries')}
+                      className="p-3 rounded-xl bg-slate-900 border border-slate-800/80 hover:border-violet-500/50 hover:bg-slate-800/60 text-slate-300 transition"
+                    >
+                      <p className="font-semibold text-violet-200 mb-1 flex items-center gap-1.5">
+                        <Cpu className="w-3.5 h-3.5 text-violet-400" />
+                        <span>Event-Driven Architecture</span>
+                      </p>
+                      <p className="text-[11px] text-slate-400">Design fault-tolerant event queues & state</p>
+                    </button>
+                    <button
+                      onClick={() => handleSend('Build a full-stack Next.js real-time chat pipeline with SSE streaming, error backoff, and unit tests')}
+                      className="p-3 rounded-xl bg-slate-900 border border-slate-800/80 hover:border-violet-500/50 hover:bg-slate-800/60 text-slate-300 transition"
+                    >
+                      <p className="font-semibold text-violet-200 mb-1 flex items-center gap-1.5">
+                        <Workflow className="w-3.5 h-3.5 text-cyan-400" />
+                        <span>Full-Stack Stream Pipeline</span>
+                      </p>
+                      <p className="text-[11px] text-slate-400">Implement end-to-end SSE chat & tests</p>
+                    </button>
+                    <button
+                      onClick={() => handleSend('Perform a security audit and zero-trust authentication review on a multi-tenant API')}
+                      className="p-3 rounded-xl bg-slate-900 border border-slate-800/80 hover:border-violet-500/50 hover:bg-slate-800/60 text-slate-300 transition"
+                    >
+                      <p className="font-semibold text-violet-200 mb-1 flex items-center gap-1.5">
+                        <ShieldAlert className="w-3.5 h-3.5 text-emerald-400" />
+                        <span>Zero-Trust Security Audit</span>
+                      </p>
+                      <p className="text-[11px] text-slate-400">Evaluate token validation & threat surfaces</p>
+                    </button>
+                    <button
+                      onClick={() => handleSend('Deconstruct and explain the deep thinking reasoning protocol of modern open-weights frontier models')}
+                      className="p-3 rounded-xl bg-slate-900 border border-slate-800/80 hover:border-violet-500/50 hover:bg-slate-800/60 text-slate-300 transition"
+                    >
+                      <p className="font-semibold text-violet-200 mb-1 flex items-center gap-1.5">
+                        <Brain className="w-3.5 h-3.5 text-pink-400" />
+                        <span>Deep Thinking Analysis</span>
+                      </p>
+                      <p className="text-[11px] text-slate-400">Explore reasoning chains & verification</p>
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      onClick={() => handleSend('Explain the difference between Radox AI and InternLM models')}
+                      className="p-3 rounded-xl bg-slate-900 border border-slate-800/80 hover:border-cyan-500/50 hover:bg-slate-800/60 text-slate-300 transition"
+                    >
+                      <p className="font-semibold text-slate-100 mb-1">Architecture Comparison</p>
+                      <p className="text-[11px] text-slate-400">Compare provider features and latencies</p>
+                    </button>
+                    <button
+                      onClick={() => handleSend('Write a high-performance TypeScript microservice for streaming AI completions')}
+                      className="p-3 rounded-xl bg-slate-900 border border-slate-800/80 hover:border-cyan-500/50 hover:bg-slate-800/60 text-slate-300 transition"
+                    >
+                      <p className="font-semibold text-slate-100 mb-1">TypeScript Microservice</p>
+                      <p className="text-[11px] text-slate-400">Build high-throughput SSE proxy</p>
+                    </button>
+                  </>
+                )}
               </div>
             </div>
           ) : (
-            messages.map((msg) => {
+            messages.map((msg, idx) => {
               const isUser = msg.role === 'user';
               return (
                 <div
@@ -478,8 +616,14 @@ export default function ChatPage() {
                   }`}
                 >
                   {!isUser && (
-                    <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-blue-600 to-cyan-500 flex items-center justify-center text-white shrink-0 mt-0.5 shadow-md shadow-cyan-500/10">
-                      <Sparkles className="w-4 h-4" />
+                    <div
+                      className={`w-8 h-8 rounded-xl flex items-center justify-center text-white shrink-0 mt-0.5 shadow-md ${
+                        mode === 'agent'
+                          ? 'bg-gradient-to-tr from-violet-600 to-indigo-500 shadow-violet-500/20'
+                          : 'bg-gradient-to-tr from-blue-600 to-cyan-500 shadow-cyan-500/10'
+                      }`}
+                    >
+                      {mode === 'agent' ? <Bot className="w-4 h-4" /> : <Sparkles className="w-4 h-4" />}
                     </div>
                   )}
 
@@ -496,11 +640,14 @@ export default function ChatPage() {
                       ) : (
                         <div>
                           {msg.content ? (
-                            <MarkdownRenderer content={msg.content} />
+                            <AgentReasoningCard
+                              content={msg.content}
+                              isStreaming={isStreaming && idx === messages.length - 1}
+                            />
                           ) : (
-                            <div className="flex items-center gap-1.5 py-1 text-slate-400 text-xs font-mono">
+                            <div className="flex items-center gap-2 py-1 text-slate-400 text-xs font-mono">
                               <span className="w-2 h-2 rounded-full bg-cyan-400 animate-ping" />
-                              <span>Generating response...</span>
+                              <span>{mode === 'agent' ? 'Agent planning & reasoning...' : 'Generating response...'}</span>
                             </div>
                           )}
                         </div>
@@ -510,6 +657,11 @@ export default function ChatPage() {
                     {/* Metadata & Actions */}
                     {!isUser && msg.content && (
                       <div className="flex items-center gap-2 mt-1.5 px-1 text-xs text-slate-500">
+                        {mode === 'agent' && (
+                          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-violet-950/80 text-violet-300 border border-violet-800/40">
+                            AGENT MODE
+                          </span>
+                        )}
                         {msg.model && (
                           <span className="text-[10px] font-mono text-slate-400">
                             {msg.model}
@@ -569,7 +721,11 @@ export default function ChatPage() {
                     handleSend();
                   }
                 }}
-                placeholder="Ask Hyunk AI Hub anything..."
+                placeholder={
+                  mode === 'agent'
+                    ? 'Describe an objective, architectural task, or implementation plan for the Agent...'
+                    : 'Ask Hyunk AI Hub anything...'
+                }
                 rows={1}
                 className="flex-1 max-h-44 p-2 bg-transparent text-sm text-slate-100 placeholder-slate-500 resize-none focus:outline-none"
               />
@@ -588,10 +744,14 @@ export default function ChatPage() {
                   type="button"
                   onClick={() => handleSend()}
                   disabled={!input.trim()}
-                  className="p-2.5 rounded-xl bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 disabled:opacity-40 text-white transition shadow-md shadow-blue-600/20"
-                  title="Send message"
+                  className={`p-2.5 rounded-xl text-white transition shadow-md disabled:opacity-40 ${
+                    mode === 'agent'
+                      ? 'bg-gradient-to-r from-violet-600 via-indigo-600 to-cyan-600 hover:from-violet-500 hover:to-cyan-500 shadow-violet-600/30'
+                      : 'bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 shadow-blue-600/20'
+                  }`}
+                  title={mode === 'agent' ? 'Execute Agent Plan' : 'Send message'}
                 >
-                  <Send className="w-4 h-4" />
+                  {mode === 'agent' ? <Bot className="w-4 h-4" /> : <Send className="w-4 h-4" />}
                 </button>
               )}
             </div>
