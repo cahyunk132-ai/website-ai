@@ -36,6 +36,9 @@ Follow this strict operational pipeline:
    Provide the complete, exhaustive, production-grade implementation or answer outside of the thought and action blocks. Do not use placeholders or omit critical logic.
 Always maintain high technical precision, thoroughness, and structured clarity.`;
 
+export const dynamic = 'force-dynamic';
+export const maxDuration = 60; // 60s timeout for streaming completions on Vercel
+
 export async function POST(req: NextRequest) {
   try {
     const json = await req.json();

@@ -5,6 +5,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getConversationMessages, deleteConversation } from '@/lib/storage';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(
   req: NextRequest,
   { params }: { params: { id: string } }

@@ -12,6 +12,8 @@ const createConvSchema = z.object({
   provider: z.string().min(1),
 });
 
+export const dynamic = 'force-dynamic';
+
 export async function GET() {
   try {
     const convs = await listConversations();

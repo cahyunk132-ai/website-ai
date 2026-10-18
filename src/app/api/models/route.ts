@@ -7,6 +7,8 @@ import { VERIFIED_MODELS } from '@/lib/ai/models';
 import { radoxAdapter } from '@/lib/ai/providers/radox';
 import { inkstoneAdapter } from '@/lib/ai/providers/inkstone';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET() {
   const configuredProviders = {
     radox: radoxAdapter.isConfigured(),

@@ -7,6 +7,8 @@ import { getAllProviderStats } from '@/lib/ai/usage';
 import { radoxAdapter } from '@/lib/ai/providers/radox';
 import { inkstoneAdapter } from '@/lib/ai/providers/inkstone';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET() {
   const stats = getAllProviderStats();
 

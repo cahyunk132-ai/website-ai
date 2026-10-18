@@ -21,6 +21,8 @@ const deleteKeySchema = z.object({
   keyId: z.string().min(3),
 });
 
+export const dynamic = 'force-dynamic';
+
 export async function GET() {
   await keyPoolManager.refreshPool();
 
