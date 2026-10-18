@@ -54,7 +54,7 @@ export class ProviderRouter {
    * Builds an execution route plan with primary and ordered fallback candidates.
    */
   buildRoutePlan(requestedModelId: string, preferredProvider?: ProviderId): RouteExecutionPlan {
-    const model = getModelById(requestedModelId);
+    const model = getModelById(requestedModelId, preferredProvider);
     const primaryProvider = preferredProvider || model?.provider || 'radox';
     const primaryModel = model?.id || requestedModelId;
 

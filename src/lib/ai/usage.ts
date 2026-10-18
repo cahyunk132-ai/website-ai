@@ -57,9 +57,10 @@ export function estimateTokens(text: string): number {
 export function calculateCost(
   modelId: string,
   promptTokens: number,
-  completionTokens: number
+  completionTokens: number,
+  provider?: ProviderId
 ): number {
-  const model = getModelById(modelId);
+  const model = getModelById(modelId, provider);
   if (!model) return 0;
 
   const promptCost = (promptTokens / 1_000_000) * model.inputPricePerMillion;

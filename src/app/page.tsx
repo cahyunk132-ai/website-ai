@@ -76,8 +76,12 @@ export default function ChatPage() {
         const data = await res.json();
         setModels(data.models || []);
         if (data.models && data.models.length > 0) {
-          const freeModel = data.models.find((m: any) => m.isFreeQuotaEligible);
-          setSelectedModelId(freeModel ? freeModel.id : data.models[0].id);
+          setSelectedModelId((prev) => {
+            const exists = data.models.some((m: any) => m.id === prev);
+            if (exists) return prev;
+            const freeModel = data.models.find((m: any) => m.isFreeQuotaEligible);
+            return freeModel ? freeModel.id : data.models[0].id;
+          });
         }
       }
     } catch {
@@ -366,19 +370,33 @@ export default function ChatPage() {
               .filter((m) => m.isFreeQuotaEligible)
               .slice(0, 15)
               .map((m) => {
-                const isActive = selectedModelId === m.id;
+                const isActive =
+                  selectedModelId === m.id &&
+                  (selectedProvider === 'auto' || selectedProvider === m.provider);
                 return (
                   <button
-                    key={m.id}
-                    onClick={() => setSelectedModelId(m.id)}
-                    className={`px-2.5 py-1 rounded-lg text-[11px] font-medium transition shrink-0 flex items-center gap-1 ${
+                    key={`${m.provider}-${m.id}`}
+                    onClick={() => {
+                      setSelectedModelId(m.id);
+                      setSelectedProvider(m.provider);
+                    }}
+                    className={`px-2.5 py-1 rounded-lg text-[11px] font-medium transition shrink-0 flex items-center gap-1.5 ${
                       isActive
                         ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/50 shadow-sm'
                         : 'bg-slate-900/90 text-slate-400 hover:text-slate-200 hover:bg-slate-800 border border-slate-800/80'
                     }`}
                   >
                     {isActive && <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />}
-                    <span>{m.name.replace(' (Radox Free)', '').replace(' (InkStone)', '').replace(' (Radox)', '')}</span>
+                    <span>
+                      {m.name
+                        .replace(' (Radox Free)', '')
+                        .replace(' (InkStone Free)', '')
+                        .replace(' (InkStone)', '')
+                        .replace(' (Radox)', '')}
+                    </span>
+                    <span className="text-[9px] px-1 py-0.2 rounded bg-slate-800/80 text-slate-400 font-mono">
+                      {m.provider === 'inkstone' ? 'Ink' : 'Radox'}
+                    </span>
                   </button>
                 );
               })}

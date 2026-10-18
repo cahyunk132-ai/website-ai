@@ -24,7 +24,14 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  const selectedModel = models.find((m) => m.id === selectedModelId) || models[0];
+  const selectedModel =
+    models.find(
+      (m) =>
+        m.id === selectedModelId &&
+        (selectedProvider === 'auto' || m.provider === selectedProvider)
+    ) ||
+    models.find((m) => m.id === selectedModelId) ||
+    models[0];
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -156,12 +163,15 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
               </div>
             ) : (
               filteredModels.map((model) => {
-                const isSelected = model.id === selectedModelId;
+                const isSelected =
+                  model.id === selectedModelId &&
+                  (selectedProvider === 'auto' || model.provider === selectedProvider);
                 return (
                   <div
-                    key={model.id}
+                    key={`${model.provider}-${model.id}`}
                     onClick={() => {
                       onSelectModel(model.id);
+                      onSelectProvider(model.provider);
                       setIsOpen(false);
                     }}
                     className={`p-2.5 rounded-xl cursor-pointer transition border text-left ${
@@ -180,7 +190,9 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
                         )}
                       </div>
                       <span className="text-[10px] text-cyan-400 uppercase tracking-wider font-mono">
-                        {Math.round(model.contextWindow / 1000)}k ctx
+                        {model.contextWindow >= 1000000
+                          ? `${Math.round(model.contextWindow / 1000000)}M ctx`
+                          : `${Math.round(model.contextWindow / 1000)}k ctx`}
                       </span>
                     </div>
 

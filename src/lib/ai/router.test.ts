@@ -3,6 +3,7 @@ import { ProviderRouter } from './router';
 import { RadoxAdapter } from './providers/radox';
 import { InkstoneAdapter } from './providers/inkstone';
 import { QuotaExceededError } from './errors';
+import { getModelById, getModelsByProvider } from './models';
 
 describe('Provider Router & Automatic Fallback', () => {
   it('builds an appropriate execution plan with primary and fallback providers', () => {
@@ -81,5 +82,34 @@ describe('Provider Router & Automatic Fallback', () => {
     expect(result.text).toBe('Hello from Radox fallback!');
     expect(result.provider).toBe('radox');
     expect(result.isFallback).toBe(true);
+  });
+
+  it('correctly registers all 12 platform catalog InkStone models with free tier eligibility', () => {
+    const catalogIds = [
+      'Agents-A1',
+      'Atria-Dawn',
+      'Atria-Dawn-Preview',
+      'deepseek-v4-flash-0731',
+      'deepseek-v4-flash-vision',
+      'deepseek-v4-pro-0813',
+      'glm-5.3',
+      'intern-decision-4b',
+      'intern-s2',
+      'kimi-k2.6',
+      'minimax-m3',
+      'qwen3.8-27b',
+    ];
+
+    for (const modelId of catalogIds) {
+      const model = getModelById(modelId, 'inkstone');
+      expect(model, `Expected ${modelId} to exist in VERIFIED_MODELS`).toBeDefined();
+      expect(model?.provider).toBe('inkstone');
+      expect(model?.isFreeQuotaEligible).toBe(true);
+      expect(model?.inputPricePerMillion).toBe(0.0);
+      expect(model?.outputPricePerMillion).toBe(0.0);
+    }
+
+    const inkstoneModels = getModelsByProvider('inkstone');
+    expect(inkstoneModels.length).toBeGreaterThanOrEqual(16);
   });
 });
