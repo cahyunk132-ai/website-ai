@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { X, Folder, Edit3, MessageSquare, Trash2, Check, Sparkles } from 'lucide-react';
+import { X, Folder, Edit3, MessageSquare, Trash2, Check, Sparkles, Tag, Plus, Share2 } from 'lucide-react';
 import { ConversationSummary, FolderItem } from '@/lib/storage';
 
 interface ConversationSettingsModalProps {
@@ -11,6 +11,7 @@ interface ConversationSettingsModalProps {
   folders: FolderItem[];
   onUpdate: (id: string, updates: Partial<ConversationSummary>) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
+  onShare?: () => void;
 }
 
 export const ConversationSettingsModal: React.FC<ConversationSettingsModalProps> = ({
@@ -20,6 +21,7 @@ export const ConversationSettingsModal: React.FC<ConversationSettingsModalProps>
   folders,
   onUpdate,
   onDelete,
+  onShare,
 }) => {
   if (!isOpen || !conversation) return null;
 
@@ -27,7 +29,22 @@ export const ConversationSettingsModal: React.FC<ConversationSettingsModalProps>
   const [folderId, setFolderId] = useState<string | null>(conversation.folderId || null);
   const [systemPrompt, setSystemPrompt] = useState(conversation.systemPrompt || '');
   const [temperature, setTemperature] = useState(conversation.temperature ?? 0.7);
+  const [tags, setTags] = useState<string[]>(conversation.tags || []);
+  const [tagInput, setTagInput] = useState('');
   const [saving, setSaving] = useState(false);
+
+  const addTag = () => {
+    const value = tagInput.trim().replace(/^#/, '').slice(0, 40);
+    if (!value) return;
+    if (!tags.some((tag) => tag.toLowerCase() === value.toLowerCase())) {
+      setTags((prev) => [...prev, value].slice(0, 12));
+    }
+    setTagInput('');
+  };
+
+  const removeTag = (tag: string) => {
+    setTags((prev) => prev.filter((item) => item !== tag));
+  };
 
   const handleSave = async () => {
     setSaving(true);
@@ -37,6 +54,7 @@ export const ConversationSettingsModal: React.FC<ConversationSettingsModalProps>
         folderId,
         systemPrompt,
         temperature,
+        tags,
       });
       onClose();
     } finally {
@@ -45,7 +63,7 @@ export const ConversationSettingsModal: React.FC<ConversationSettingsModalProps>
   };
 
   const handleDelete = async () => {
-    if (confirm('Are you sure you want to delete this conversation?')) {
+    if (confirm('Move this conversation to the trash? You can restore it later.')) {
       await onDelete(conversation.id);
       onClose();
     }
@@ -108,6 +126,57 @@ export const ConversationSettingsModal: React.FC<ConversationSettingsModalProps>
             </select>
           </div>
 
+          {/* Tags */}
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+              <Tag className="w-3.5 h-3.5 text-violet-400" />
+              <span>Tags</span>
+            </label>
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                value={tagInput}
+                onChange={(e) => setTagInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    addTag();
+                  }
+                }}
+                placeholder="Tambah tag lalu Enter (contoh: ide, kerjaan)"
+                className="flex-1 px-3.5 py-2 rounded-xl bg-slate-900 border border-slate-800 text-base sm:text-xs text-slate-100 focus:outline-none focus:border-cyan-500"
+              />
+              <button
+                type="button"
+                onClick={addTag}
+                className="p-2 rounded-xl border border-slate-800 hover:bg-slate-800 text-slate-400 hover:text-white transition shrink-0"
+                aria-label="Tambah tag"
+              >
+                <Plus className="w-4 h-4" />
+              </button>
+            </div>
+            {tags.length > 0 && (
+              <div className="flex items-center gap-1.5 flex-wrap pt-1">
+                {tags.map((tag) => (
+                  <span
+                    key={tag}
+                    className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-lg bg-violet-950/60 text-violet-300 border border-violet-800/50"
+                  >
+                    #{tag}
+                    <button
+                      type="button"
+                      onClick={() => removeTag(tag)}
+                      className="text-violet-400 hover:text-rose-400 transition"
+                      aria-label={`Hapus tag ${tag}`}
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+
           {/* Custom System Prompt */}
           <div className="space-y-1.5">
             <label className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
@@ -126,14 +195,29 @@ export const ConversationSettingsModal: React.FC<ConversationSettingsModalProps>
 
         {/* Footer */}
         <div className="px-5 py-3.5 border-t border-slate-800 bg-slate-900/80 flex items-center justify-between shrink-0">
-          <button
-            type="button"
-            onClick={handleDelete}
-            className="flex items-center gap-1.5 text-xs text-rose-400 hover:text-rose-300 transition"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-            <span>Delete Chat</span>
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={handleDelete}
+              className="flex items-center gap-1.5 text-xs text-rose-400 hover:text-rose-300 transition"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              <span>Delete Chat</span>
+            </button>
+            {onShare && (
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  onShare();
+                }}
+                className="flex items-center gap-1.5 text-xs text-cyan-400 hover:text-cyan-300 transition"
+              >
+                <Share2 className="w-3.5 h-3.5" />
+                <span>Share</span>
+              </button>
+            )}
+          </div>
           <div className="flex items-center gap-2">
             <button
               type="button"

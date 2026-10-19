@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   Send,
   Square,
@@ -35,6 +35,16 @@ import {
   Lock,
   BookOpen,
   Terminal,
+  Command,
+  CalendarClock,
+  Share2,
+  Trash2,
+  Bell,
+  ThumbsUp,
+  ThumbsDown,
+  Tag,
+  Plus,
+  Search,
 } from 'lucide-react';
 import { Sidebar } from '@/components/Sidebar';
 import { ModelSelector } from '@/components/ModelSelector';
@@ -49,6 +59,12 @@ import { KeyboardShortcutsModal } from '@/components/KeyboardShortcutsModal';
 import { ConversationSettingsModal } from '@/components/ConversationSettingsModal';
 import { SkillsModal } from '@/components/SkillsModal';
 import { ToolsPanel } from '@/components/ToolsPanel';
+import { CommandPalette, PaletteCommand } from '@/components/CommandPalette';
+import { MemoryPanel } from '@/components/MemoryPanel';
+import { SchedulesPanel } from '@/components/SchedulesPanel';
+import { ShareModal } from '@/components/ShareModal';
+import { TrashModal } from '@/components/TrashModal';
+import { ContextMeter } from '@/components/ContextMeter';
 import { ChatMessage, ModelCapability, ProviderId, FileAttachment } from '@/lib/ai/types';
 import { ConversationSummary, FolderItem } from '@/lib/storage';
 import { AgentStepView, AgentSkillView } from '@/lib/ai/agentEvents';
@@ -56,6 +72,12 @@ import { safeRandomUUID, safeCopyText } from '@/lib/safeUUID';
 import { useAndroidBackButton } from '@/lib/useAndroidBackButton';
 import { useAuth } from '@/lib/AuthContext';
 import { AuthModal } from '@/components/AuthModal';
+import { computeContextUsage } from '@/lib/contextMeter';
+import {
+  extractMemoryCandidates,
+  parseForgetCommand,
+  parseRememberCommand,
+} from '@/lib/memory';
 
 export default function ChatPage() {
   const { user, loading: authLoading, isAuthModalOpen, openAuthModal, closeAuthModal } = useAuth();
@@ -85,6 +107,15 @@ export default function ChatPage() {
   const [activatedSkills, setActivatedSkills] = useState<AgentSkillView[]>([]);
   const [isSkillsOpen, setIsSkillsOpen] = useState(false);
   const [isToolsOpen, setIsToolsOpen] = useState(false);
+  const [isMemoryOpen, setIsMemoryOpen] = useState(false);
+  const [isScheduleOpen, setIsScheduleOpen] = useState(false);
+  const [isShareOpen, setIsShareOpen] = useState(false);
+  const [isTrashOpen, setIsTrashOpen] = useState(false);
+  const [isPaletteOpen, setIsPaletteOpen] = useState(false);
+  const [feedback, setFeedback] = useState<Record<string, 'up' | 'down'>>({});
+  const [activeTag, setActiveTag] = useState<string | null>(null);
+  const [notificationsEnabled, setNotificationsEnabled] = useState(false);
+  const [searchFocusToken, setSearchFocusToken] = useState(0);
 
   // Theme & Navigation
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
@@ -103,6 +134,7 @@ export default function ChatPage() {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [fallbackAlert, setFallbackAlert] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [statusToast, setStatusToast] = useState<string | null>(null);
 
   const abortControllerRef = useRef<AbortController | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -118,6 +150,26 @@ export default function ChatPage() {
   const closeTopOverlay = useCallback(() => {
     if (lightboxImage) {
       setLightboxImage(null);
+      return;
+    }
+    if (isPaletteOpen) {
+      setIsPaletteOpen(false);
+      return;
+    }
+    if (isMemoryOpen) {
+      setIsMemoryOpen(false);
+      return;
+    }
+    if (isScheduleOpen) {
+      setIsScheduleOpen(false);
+      return;
+    }
+    if (isShareOpen) {
+      setIsShareOpen(false);
+      return;
+    }
+    if (isTrashOpen) {
+      setIsTrashOpen(false);
       return;
     }
     if (isSkillsOpen) {
@@ -166,6 +218,11 @@ export default function ChatPage() {
     }
   }, [
     lightboxImage,
+    isPaletteOpen,
+    isMemoryOpen,
+    isScheduleOpen,
+    isShareOpen,
+    isTrashOpen,
     isSkillsOpen,
     isToolsOpen,
     isParametersOpen,
@@ -182,6 +239,11 @@ export default function ChatPage() {
 
   const isOverlayOpen =
     !!lightboxImage ||
+    isPaletteOpen ||
+    isMemoryOpen ||
+    isScheduleOpen ||
+    isShareOpen ||
+    isTrashOpen ||
     isSkillsOpen ||
     isToolsOpen ||
     isParametersOpen ||
@@ -229,10 +291,12 @@ export default function ChatPage() {
   // Keyboard Shortcuts Listener
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Ctrl/Cmd + K: Focus history search or open search
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+      // Ctrl/Cmd + Shift + F: focus the history search (Ctrl+K opens the
+      // command palette, see below)
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'f') {
         e.preventDefault();
         setIsSidebarOpen(true);
+        setSearchFocusToken((token) => token + 1);
       }
       // Ctrl/Cmd + Shift + O or Ctrl + Shift + N: New Chat
       if ((e.ctrlKey || e.metaKey) && ((e.shiftKey && e.key.toLowerCase() === 'o') || (e.shiftKey && e.key.toLowerCase() === 'n'))) {
@@ -332,6 +396,85 @@ export default function ChatPage() {
       viewport.removeEventListener('resize', handleViewportResize);
       cancelAnimationFrame(frame);
     };
+  }, []);
+
+  /**
+   * Small transient toast used for the background actions (schedules, memory,
+   * feedback) that must not steal the focus.
+   */
+  useEffect(() => {
+    if (!statusToast) return;
+    const timer = setTimeout(() => setStatusToast(null), 4200);
+    return () => clearTimeout(timer);
+  }, [statusToast]);
+
+  /**
+   * Command palette: Ctrl/Cmd + K opens it from anywhere in the app.
+   */
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const handleKey = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault();
+        setIsPaletteOpen((open) => !open);
+        return;
+      }
+
+      if ((event.metaKey || event.ctrlKey) && event.shiftKey && event.key.toLowerCase() === 'm') {
+        event.preventDefault();
+        setIsMemoryOpen(true);
+      }
+    };
+
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, []);
+
+  /**
+   * Schedules are evaluated from the client because there is no long lived
+   * worker on a serverless platform.
+   */
+  useEffect(() => {
+    if (!user) return;
+
+    let cancelled = false;
+
+    const tick = async () => {
+      try {
+        const res = await fetch('/api/schedules/tick', { method: 'POST' });
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!cancelled && data.executed > 0) {
+          setConversations((prev) => [...prev]);
+          setStatusToast(
+            `${data.executed} jadwal otomatis selesai dijalankan.`
+          );
+        }
+      } catch {
+        // The tick is best effort, a failure must never break the chat.
+      }
+    };
+
+    tick();
+    const timer = setInterval(tick, 60_000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [user]);
+
+  /**
+   * Asks the browser for the notification permission the first time the user
+   * opens the app, so a long answer can be announced when the tab is in the
+   * background.
+   */
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (!('Notification' in window)) return;
+    if (Notification.permission === 'granted') {
+      setNotificationsEnabled(true);
+    }
   }, []);
 
   // Load models catalog
@@ -651,6 +794,51 @@ export default function ChatPage() {
     setFallbackAlert(null);
     userScrolledUpRef.current = false;
 
+    // --- Memory commands: they never reach the model ---
+    const rememberText = parseRememberCommand(textToSend);
+    if (rememberText) {
+      setInput('');
+      if (textareaRef.current) textareaRef.current.style.height = 'auto';
+      try {
+        const res = await fetch('/api/memories', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ content: rememberText, source: 'command' }),
+        });
+        const data = await res.json();
+        if (res.ok) {
+          setStatusToast(`AI akan mengingat: "${rememberText}"`);
+        } else {
+          setStatusToast(data.error || 'Gagal menyimpan memori.');
+        }
+      } catch {
+        setStatusToast('Gagal menyimpan memori.');
+      }
+      return;
+    }
+
+    const forgetText = parseForgetCommand(textToSend);
+    if (forgetText) {
+      setInput('');
+      if (textareaRef.current) textareaRef.current.style.height = 'auto';
+      try {
+        const res = await fetch('/api/memories');
+        const data = res.ok ? await res.json() : { memories: [] };
+        const target = (data.memories || []).find((memory: any) =>
+          String(memory.content).toLowerCase().includes(forgetText.toLowerCase())
+        );
+        if (target) {
+          await fetch(`/api/memories?id=${encodeURIComponent(target.id)}`, { method: 'DELETE' });
+          setStatusToast(`Memori dihapus: "${target.content}"`);
+        } else {
+          setStatusToast('Memori yang cocok tidak ditemukan.');
+        }
+      } catch {
+        setStatusToast('Gagal menghapus memori.');
+      }
+      return;
+    }
+
     try {
       const userAttachments = [...attachments];
       const userMsg: ChatMessage = {
@@ -663,6 +851,29 @@ export default function ChatPage() {
 
       const newMessages = [...messages, userMsg];
       setMessages(newMessages);
+
+      // Remember the facts the user states explicitly (high confidence only).
+      const candidates = extractMemoryCandidates(textToSend).filter(
+        (candidate) => candidate.confidence >= 0.8
+      );
+      for (const candidate of candidates) {
+        fetch('/api/memories', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            content: candidate.content,
+            category: candidate.category,
+            source: 'auto',
+          }),
+        })
+          .then((res) => (res.ok ? res.json() : null))
+          .then((data) => {
+            if (data?.memory) {
+              setStatusToast(`AI mengingat: "${data.memory.content}"`);
+            }
+          })
+          .catch(() => {});
+      }
 
       if (overrideContent === undefined) {
         setInput('');
@@ -889,6 +1100,24 @@ export default function ChatPage() {
     } finally {
       setIsStreaming(false);
       abortControllerRef.current = null;
+
+      // Announce the finished answer when the user is looking at another tab.
+      if (
+        typeof window !== 'undefined' &&
+        'Notification' in window &&
+        Notification.permission === 'granted' &&
+        document.visibilityState === 'hidden'
+      ) {
+        try {
+          new Notification('Hyunk AI Hub', {
+            body: 'Jawaban Anda sudah selesai.',
+            icon: '/icon-192.png',
+            tag: 'hyunk-answer',
+          });
+        } catch {
+          // The browser refused the notification, nothing to do.
+        }
+      }
     }
   };
 
@@ -912,6 +1141,195 @@ export default function ChatPage() {
 
   const activeConv = conversations.find((c) => c.id === activeConvId);
   const activeModel = models.find((m) => m.id === selectedModelId);
+
+  /**
+   * How much of the context window is already used by the conversation.
+   */
+  const contextUsage = useMemo(
+    () =>
+      computeContextUsage(
+        messages.map((m) => ({ role: m.role, content: m.content })),
+        activeModel?.contextWindow || 128000,
+        systemPrompt
+      ),
+    [messages, activeModel?.contextWindow, systemPrompt]
+  );
+
+  /**
+   * Stores the thumbs up / thumbs down of an assistant answer.
+   */
+  const handleFeedback = async (messageId: string, rating: 'up' | 'down') => {
+    if (!activeConvId) return;
+
+    const next = feedback[messageId] === rating ? undefined : rating;
+    setFeedback((prev) => {
+      const copy = { ...prev };
+      if (next) copy[messageId] = next;
+      else delete copy[messageId];
+      return copy;
+    });
+
+    if (!next) return;
+
+    try {
+      const res = await fetch('/api/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messageId,
+          conversationId: activeConvId,
+          rating: next,
+        }),
+      });
+      if (!res.ok) throw new Error('feedback failed');
+      setStatusToast(
+        next === 'up'
+          ? 'Terima kasih! Masukan Anda membantu.'
+          : 'Terima kasih, kami akan belajar dari masukan ini.'
+      );
+    } catch {
+      setStatusToast('Gagal menyimpan masukan.');
+    }
+  };
+
+  /**
+   * Enables the browser notifications so a long answer can be announced.
+   */
+  const handleEnableNotifications = async () => {
+    if (typeof window === 'undefined' || !('Notification' in window)) return;
+    try {
+      const permission = await Notification.requestPermission();
+      setNotificationsEnabled(permission === 'granted');
+      setStatusToast(
+        permission === 'granted'
+          ? 'Notifikasi aktif. Anda akan diberi tahu saat jawaban selesai.'
+          : 'Notifikasi tidak diizinkan oleh browser.'
+      );
+    } catch {
+      setStatusToast('Browser tidak mendukung notifikasi.');
+    }
+  };
+
+  /**
+   * The commands shown in the command palette (Ctrl/Cmd + K).
+   */
+  const paletteCommands = useMemo<PaletteCommand[]>(() => {
+    const commands: PaletteCommand[] = [
+      {
+        id: 'new-chat',
+        label: 'Percakapan baru',
+        hint: 'Mulai obrolan bersih',
+        group: 'Navigasi',
+        icon: Plus,
+        run: () => {
+          handleNewConversation();
+        },
+      },
+      {
+        id: 'toggle-mode',
+        label: mode === 'agent' ? 'Beralih ke mode Chat' : 'Beralih ke Agent Mode',
+        hint: mode === 'agent' ? 'Jawaban langsung' : 'AI menjalankan tool secara otonom',
+        group: 'Mode',
+        icon: Bot,
+        run: () => setMode((prev) => (prev === 'agent' ? 'chat' : 'agent')),
+      },
+      {
+        id: 'open-tools',
+        label: 'Buka Tool Runner',
+        hint: 'Jalankan tool keamanan dan developer secara manual',
+        group: 'Tools',
+        icon: Terminal,
+        run: () => setIsToolsOpen(true),
+      },
+      {
+        id: 'open-skills',
+        label: 'Buka Agent Skills',
+        hint: 'Kelola skill dan persona',
+        group: 'Tools',
+        icon: BookOpen,
+        run: () => setIsSkillsOpen(true),
+      },
+      {
+        id: 'search',
+        label: 'Cari percakapan',
+        hint: 'Buka pencarian di riwayat',
+        group: 'Navigasi',
+        icon: Search,
+        run: () => {
+          setIsSidebarOpen(true);
+          setSearchFocusToken((token) => token + 1);
+        },
+      },
+      {
+        id: 'open-memory',
+        label: 'Buka AI Memory',
+        hint: 'Facta yang diingat AI antar percakapan',
+        group: 'Fitur',
+        icon: Brain,
+        run: () => setIsMemoryOpen(true),
+      },
+      {
+        id: 'open-schedules',
+        label: 'Buka Jadwal Otomatis',
+        hint: 'Prompt cron yang berjalan sendiri',
+        group: 'Fitur',
+        icon: CalendarClock,
+        run: () => setIsScheduleOpen(true),
+      },
+      {
+        id: 'open-trash',
+        label: 'Buka Sampah',
+        hint: 'Pulihkan percakapan yang dihapus',
+        group: 'Fitur',
+        icon: Trash2,
+        run: () => setIsTrashOpen(true),
+      },
+      {
+        id: 'share',
+        label: 'Bagikan percakapan ini',
+        hint: 'Buat tautan publik read-only',
+        group: 'Fitur',
+        icon: Share2,
+        run: () => setIsShareOpen(true),
+      },
+      {
+        id: 'dashboard',
+        label: 'Buka Dashboard Usage',
+        hint: 'Kuota, token, dan grafik aktivitas',
+        group: 'Navigasi',
+        icon: Zap,
+        run: () => setIsDashboardOpen(true),
+      },
+      {
+        id: 'export',
+        label: 'Export percakapan',
+        hint: 'Markdown, JSON, atau PDF',
+        group: 'Navigasi',
+        icon: Download,
+        run: () => setIsExportOpen(true),
+      },
+      {
+        id: 'theme',
+        label: theme === 'dark' ? 'Ganti ke mode terang' : 'Ganti ke mode gelap',
+        group: 'Tampilan',
+        icon: Sparkles,
+        run: () => setTheme((prev) => (prev === 'dark' ? 'light' : 'dark')),
+      },
+      {
+        id: 'notifications',
+        label: 'Aktifkan notifikasi selesai',
+        hint: 'Beri tahu saat jawaban panjang selesai',
+        group: 'Tampilan',
+        icon: Bell,
+        run: () => {
+          handleEnableNotifications();
+        },
+      },
+    ];
+
+    return commands;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, theme, messages.length, conversations.length]);
 
   return (
     <div
@@ -954,6 +1372,10 @@ export default function ChatPage() {
         onOpenDashboard={() => setIsDashboardOpen(true)}
         onOpenShortcuts={() => setIsShortcutsOpen(true)}
         onOpenDownloadApp={() => setIsDownloadOpen(true)}
+        onOpenTrash={() => setIsTrashOpen(true)}
+        searchFocusToken={searchFocusToken}
+        onOpenMemory={() => setIsMemoryOpen(true)}
+        onOpenSchedules={() => setIsScheduleOpen(true)}
         onOpenExport={() => setIsExportOpen(true)}
         isOpen={isSidebarOpen}
         onToggleOpen={() => setIsSidebarOpen(!isSidebarOpen)}
@@ -1078,6 +1500,76 @@ export default function ChatPage() {
             >
               <Terminal className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
               <span className="hidden md:inline font-medium">Tools</span>
+            </button>
+
+            {/* Command Palette Button */}
+            <button
+              onClick={() => setIsPaletteOpen(true)}
+              className={`p-2 sm:px-2.5 sm:py-1.5 rounded-xl border text-xs transition flex items-center gap-1.5 ${
+                theme === 'dark'
+                  ? 'bg-slate-900 hover:bg-slate-800 border-slate-800 text-slate-300'
+                  : 'bg-white hover:bg-slate-100 border-slate-300 text-slate-700'
+              }`}
+              title="Command Palette (Ctrl/Cmd + K)"
+            >
+              <Command className="w-3.5 h-3.5 text-violet-400 shrink-0" />
+              <span className="hidden lg:inline font-medium">Palette</span>
+            </button>
+
+            {/* AI Memory Button */}
+            <button
+              onClick={() => setIsMemoryOpen(true)}
+              className={`p-2 sm:px-2.5 sm:py-1.5 rounded-xl border text-xs transition flex items-center gap-1.5 ${
+                theme === 'dark'
+                  ? 'bg-slate-900 hover:bg-slate-800 border-slate-800 text-slate-300'
+                  : 'bg-white hover:bg-slate-100 border-slate-300 text-slate-700'
+              }`}
+              title="AI Memory - fakta yang diingat AI"
+            >
+              <Brain className="w-3.5 h-3.5 text-violet-400 shrink-0" />
+              <span className="hidden xl:inline font-medium">Memory</span>
+            </button>
+
+            {/* Schedules Button */}
+            <button
+              onClick={() => setIsScheduleOpen(true)}
+              className={`p-2 sm:px-2.5 sm:py-1.5 rounded-xl border text-xs transition flex items-center gap-1.5 ${
+                theme === 'dark'
+                  ? 'bg-slate-900 hover:bg-slate-800 border-slate-800 text-slate-300'
+                  : 'bg-white hover:bg-slate-100 border-slate-300 text-slate-700'
+              }`}
+              title="Jadwal otomatis (cron)"
+            >
+              <CalendarClock className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+              <span className="hidden xl:inline font-medium">Jadwal</span>
+            </button>
+
+            {/* Share Button */}
+            <button
+              onClick={() => setIsShareOpen(true)}
+              className={`p-2 sm:px-2.5 sm:py-1.5 rounded-xl border text-xs transition flex items-center gap-1.5 ${
+                theme === 'dark'
+                  ? 'bg-slate-900 hover:bg-slate-800 border-slate-800 text-slate-300'
+                  : 'bg-white hover:bg-slate-100 border-slate-300 text-slate-700'
+              }`}
+              title="Bagikan percakapan (tautan publik)"
+            >
+              <Share2 className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+              <span className="hidden xl:inline font-medium">Share</span>
+            </button>
+
+            {/* Trash Button */}
+            <button
+              onClick={() => setIsTrashOpen(true)}
+              className={`p-2 sm:px-2.5 sm:py-1.5 rounded-xl border text-xs transition flex items-center gap-1.5 ${
+                theme === 'dark'
+                  ? 'bg-slate-900 hover:bg-slate-800 border-slate-800 text-slate-300'
+                  : 'bg-white hover:bg-slate-100 border-slate-300 text-slate-700'
+              }`}
+              title="Sampah - pulihkan percakapan yang dihapus"
+            >
+              <Trash2 className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+              <span className="hidden 2xl:inline font-medium">Sampah</span>
             </button>
 
             {/* Export Button */}
@@ -1406,6 +1898,34 @@ export default function ChatPage() {
                             <Copy className="w-3.5 h-3.5" />
                           )}
                         </button>
+                        <button
+                          onClick={() => handleFeedback(msg.id, 'up')}
+                          className={`touch-target -m-1 p-1 transition ${
+                            feedback[msg.id] === 'up'
+                              ? 'text-emerald-400'
+                              : 'hover:text-emerald-400'
+                          }`}
+                          title="Jawaban ini membantu"
+                        >
+                          <ThumbsUp
+                            className={`w-3.5 h-3.5 ${
+                              feedback[msg.id] === 'up' ? 'fill-emerald-400/20' : ''
+                            }`}
+                          />
+                        </button>
+                        <button
+                          onClick={() => handleFeedback(msg.id, 'down')}
+                          className={`touch-target -m-1 p-1 transition ${
+                            feedback[msg.id] === 'down' ? 'text-rose-400' : 'hover:text-rose-400'
+                          }`}
+                          title="Jawaban ini kurang membantu"
+                        >
+                          <ThumbsDown
+                            className={`w-3.5 h-3.5 ${
+                              feedback[msg.id] === 'down' ? 'fill-rose-400/20' : ''
+                            }`}
+                          />
+                        </button>
                       </div>
                     )}
                   </div>
@@ -1499,8 +2019,15 @@ export default function ChatPage() {
                 )}
               </div>
 
-              <div className="hidden sm:inline text-[11px] text-slate-500">
-                Shift + Enter for newline
+              <div className="hidden sm:flex items-center gap-3">
+                <ContextMeter
+                  used={contextUsage.used}
+                  window={contextUsage.window}
+                  percent={contextUsage.percent}
+                  warning={contextUsage.warning}
+                  overflow={contextUsage.overflow}
+                />
+                <span className="text-[11px] text-slate-500">Shift + Enter for newline</span>
               </div>
             </div>
 
@@ -1592,6 +2119,13 @@ export default function ChatPage() {
         )}
       </main>
 
+      {/* Transient status toast */}
+      {statusToast && (
+        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-[70] px-3.5 py-2 rounded-xl bg-slate-900 border border-slate-700 shadow-xl text-xs text-slate-200 animate-fadeIn max-w-[90vw]">
+          {statusToast}
+        </div>
+      )}
+
       {/* Lightbox Image Preview Modal */}
       {lightboxImage && (
         <div
@@ -1633,6 +2167,7 @@ export default function ChatPage() {
       />
       <ConversationSettingsModal
         isOpen={isConvSettingsOpen}
+        onShare={() => setIsShareOpen(true)}
         onClose={() => {
           setIsConvSettingsOpen(false);
           setConvToEdit(null);
@@ -1658,6 +2193,40 @@ export default function ChatPage() {
         onChanged={fetchPinnedSkills}
       />
       <ToolsPanel isOpen={isToolsOpen} onClose={() => setIsToolsOpen(false)} />
+      <MemoryPanel
+        isOpen={isMemoryOpen}
+        onClose={() => setIsMemoryOpen(false)}
+        onChanged={() => setStatusToast('Memori diperbarui.')}
+      />
+      <SchedulesPanel
+        isOpen={isScheduleOpen}
+        onClose={() => setIsScheduleOpen(false)}
+        models={models}
+        defaultModel={selectedModelId}
+      />
+      <ShareModal
+        isOpen={isShareOpen}
+        onClose={() => setIsShareOpen(false)}
+        conversationId={activeConvId}
+        title={activeConv?.title}
+      />
+      <TrashModal
+        isOpen={isTrashOpen}
+        onClose={() => setIsTrashOpen(false)}
+        onChanged={() => {
+          fetchConversations();
+        }}
+      />
+      <CommandPalette
+        isOpen={isPaletteOpen}
+        onClose={() => setIsPaletteOpen(false)}
+        commands={paletteCommands}
+        composerText={input}
+        onInsertPrompt={(text) => {
+          setInput((prev) => (prev ? `${prev.trim()}\n${text}` : text));
+          setTimeout(() => textareaRef.current?.focus(), 40);
+        }}
+      />
       <DownloadAppModal
         isOpen={isDownloadOpen}
         onClose={() => setIsDownloadOpen(false)}

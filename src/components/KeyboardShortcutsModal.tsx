@@ -20,7 +20,9 @@ export const KeyboardShortcutsModal: React.FC<KeyboardShortcutsModalProps> = ({ 
   const shortcuts: ShortcutItem[] = [
     { keys: ['Enter'], description: 'Send chat message', category: 'Chat' },
     { keys: ['Shift', 'Enter'], description: 'Add new line in input', category: 'Chat' },
-    { keys: ['Ctrl', 'K'], description: 'Focus conversation search', category: 'Navigation' },
+    { keys: ['Ctrl', 'K'], description: 'Open the Command Palette (actions & prompt templates)', category: 'Navigation' },
+    { keys: ['Ctrl', 'Shift', 'F'], description: 'Focus the conversation search', category: 'Navigation' },
+    { keys: ['Ctrl', 'Shift', 'M'], description: 'Open the AI Memory panel', category: 'Navigation' },
     { keys: ['Ctrl', 'Shift', 'O'], description: 'Create new chat session', category: 'Navigation' },
     { keys: ['Ctrl', 'B'], description: 'Toggle conversation sidebar', category: 'Navigation' },
     { keys: ['Ctrl', 'Shift', 'D'], description: 'Toggle Dark / Light theme', category: 'System' },

@@ -19,6 +19,10 @@ export interface ConversationSummary {
   systemPrompt?: string;
   temperature?: number;
   userId?: string | null;
+  /** Labels attached to the conversation (used by the tag filter). */
+  tags?: string[];
+  /** Set when the conversation was moved to the trash. */
+  deletedAt?: string | null;
 }
 
 export interface FolderItem {
@@ -145,6 +149,8 @@ function mapConversationRow(row: any): ConversationSummary {
     folderId: row.folder_id ?? null,
     systemPrompt: row.system_prompt ?? undefined,
     temperature: row.temperature ?? undefined,
+    tags: Array.isArray(row.tags) ? row.tags : [],
+    deletedAt: row.deleted_at ?? null,
   };
 }
 
@@ -165,7 +171,7 @@ export async function listConversations(userId?: string): Promise<ConversationSu
   const supabase = getUserClient();
   if (supabase) {
     try {
-      let query = supabase.from('conversations').select('*');
+      let query = supabase.from('conversations').select('*').is('deleted_at', null);
       if (userId) {
         query = query.eq('user_id', userId);
       }
@@ -180,8 +186,111 @@ export async function listConversations(userId?: string): Promise<ConversationSu
   }
 
   return Array.from(memoryConversations.values())
+    .filter((c) => !c.deletedAt)
     .filter((c) => !userId || c.userId === userId || !c.userId)
     .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+}
+
+/**
+ * Lists the conversations that were moved to the trash.
+ */
+export async function listTrashedConversations(userId?: string): Promise<ConversationSummary[]> {
+  const supabase = getUserClient();
+  if (supabase) {
+    try {
+      let query = supabase.from('conversations').select('*').not('deleted_at', 'is', null);
+      if (userId) {
+        query = query.eq('user_id', userId);
+      }
+      const { data, error } = await query.order('deleted_at', { ascending: false });
+
+      if (!error && data) {
+        return data.map(mapConversationRow);
+      }
+    } catch {
+      // Fallback to memory
+    }
+  }
+
+  return Array.from(memoryConversations.values())
+    .filter((c) => Boolean(c.deletedAt))
+    .filter((c) => !userId || c.userId === userId || !c.userId)
+    .sort((a, b) => new Date(b.deletedAt || b.updatedAt).getTime() - new Date(a.deletedAt || a.updatedAt).getTime());
+}
+
+/**
+ * Moves a conversation to the trash. The conversation stays recoverable until
+ * it is purged explicitly.
+ */
+export async function trashConversation(conversationId: string): Promise<boolean> {
+  const deletedAt = new Date().toISOString();
+
+  const supabase = getUserClient();
+  if (supabase) {
+    try {
+      const { error } = await supabase
+        .from('conversations')
+        .update({ deleted_at: deletedAt, updated_at: deletedAt })
+        .eq('id', conversationId);
+      if (!error) return true;
+    } catch {
+      // Fallback
+    }
+  }
+
+  const existing = memoryConversations.get(conversationId);
+  if (!existing) return false;
+  memoryConversations.set(conversationId, { ...existing, deletedAt });
+  return true;
+}
+
+/**
+ * Brings a conversation back from the trash.
+ */
+export async function restoreConversation(conversationId: string): Promise<boolean> {
+  const supabase = getUserClient();
+  if (supabase) {
+    try {
+      const { error } = await supabase
+        .from('conversations')
+        .update({ deleted_at: null, updated_at: new Date().toISOString() })
+        .eq('id', conversationId);
+      if (!error) return true;
+    } catch {
+      // Fallback
+    }
+  }
+
+  const existing = memoryConversations.get(conversationId);
+  if (!existing) return false;
+  memoryConversations.set(conversationId, { ...existing, deletedAt: null });
+  return true;
+}
+
+/**
+ * Removes a conversation for good (used by the "empty trash" action).
+ */
+export async function purgeConversation(conversationId: string): Promise<boolean> {
+  const supabase = getUserClient();
+  if (supabase) {
+    try {
+      const { error } = await supabase
+        .from('conversations')
+        .delete()
+        .eq('id', conversationId);
+      if (!error) {
+        memoryConversations.delete(conversationId);
+        memoryMessages.delete(conversationId);
+        return true;
+      }
+    } catch {
+      // Fallback
+    }
+  }
+
+  memoryConversations.delete(conversationId);
+  memoryMessages.delete(conversationId);
+  return true;
 }
 
 export async function createConversation(
@@ -204,6 +313,8 @@ export async function createConversation(
     folderId: null,
     systemPrompt: undefined,
     temperature: undefined,
+    tags: [],
+    deletedAt: null,
   };
 
   const supabase = getUserClient();
@@ -364,6 +475,8 @@ export async function updateConversation(
       if (updates.folderId !== undefined) dbUpdates.folder_id = updates.folderId;
       if (updates.systemPrompt !== undefined) dbUpdates.system_prompt = updates.systemPrompt;
       if (updates.temperature !== undefined) dbUpdates.temperature = updates.temperature;
+      if (updates.tags !== undefined) dbUpdates.tags = updates.tags;
+      if (updates.deletedAt !== undefined) dbUpdates.deleted_at = updates.deletedAt;
 
       const { data, error } = await supabase
         .from('conversations')

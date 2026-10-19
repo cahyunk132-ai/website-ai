@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import { UsageChart } from './UsageChart';
 import { X, Activity, RefreshCw, AlertTriangle, CheckCircle2, Clock, DollarSign, Database } from 'lucide-react';
 import { ProviderHealth, ProviderId } from '@/lib/ai/types';
 
@@ -76,6 +77,9 @@ export const UsageDashboardModal: React.FC<UsageDashboardModalProps> = ({ isOpen
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-3.5 sm:p-6 space-y-4 sm:space-y-6">
+          {/* Daily activity chart */}
+          <UsageChart days={7} />
+
           {/* Top Aggregated Metric Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-4">
             <div className="p-4 rounded-xl bg-slate-950/70 border border-slate-800/80">

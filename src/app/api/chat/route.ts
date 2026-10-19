@@ -17,6 +17,7 @@ import { buildAgentSystemPrompt, buildPersonaSystemPrompt } from '@/lib/ai/agent
 import { runAgent, AgentStepResult } from '@/lib/ai/agent';
 import { AGENT_TOOLS } from '@/lib/ai/tools';
 import { getSkillCatalog, loadSkillContent, loadPinnedSkills } from '@/lib/skills/registry';
+import { listMemories, buildMemoryPrompt } from '@/lib/featureStorage';
 import { ActivatedSkill } from '@/lib/skills/types';
 
 const attachmentSchema = z.object({
@@ -129,8 +130,18 @@ export async function POST(req: NextRequest) {
       if (skill) pinnedSkills.push(skill);
     }
 
+    // ---------------------------------------------------------------------
+    // AI memory: the facts the user asked the assistant to remember
+    // ---------------------------------------------------------------------
+    const memories = await listMemories(user.id);
+    const memoryPrompt = buildMemoryPrompt(memories);
+
     // Prepare message array
     const preparedMessages: Array<{ role: 'user' | 'assistant' | 'system'; content: any }> = [];
+
+    if (memoryPrompt) {
+      preparedMessages.push({ role: 'system', content: memoryPrompt });
+    }
 
     if (mode === 'agent') {
       // The agent gets the full protocol, the tool catalogue and the skill
