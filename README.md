@@ -59,6 +59,7 @@
 - **Agent Skills (Progressive Disclosure)**: A skill library stored in Supabase. The model only receives the *name + description* of every skill; the full body is loaded on demand the moment the agent decides to use it (`<skill_use skill="..."/>`). **28 built-in skills** ship with the platform (engineering, devops, data, writing, research, security, productivity, language) and users can browse, pin and author their own skills from the **Skills** panel.
 - **Preset Personas**: A pinned skill becomes a manual persona that is injected into every request (agent *and* standard chat mode).
 - **Autonomous Agent Loop**: In agent mode the model can call tools (`web_search`, `fetch_url`, `http_request`, `code_interpreter`, `calculator`, `datetime`) and load skills. Every result is fed back to the model, which continues with the next step until it produces the final answer. The UI shows the whole **Agent Execution Timeline**.
+- **Tiered Live Web Search**: the web search of the platform runs in tiers, so a question like "gubernur kaltim sekarang" is answered with **fresh** information instead of the training data of the model. The first tier that answers wins: **Brave Search API**, **Tavily**, **Serper.dev** or **Google Programmable Search** (when a key is configured), then the keyless tiers **DuckDuckGo HTML**, **Mojeek** and **DuckDuckGo Lite**, then **Wikipedia** (the right page is resolved through the search API) and finally the old **DuckDuckGo Instant Answer** as a last resort. Every hit keeps its publication date, a query that asks for recent information ("sekarang", "terbaru", "latest") activates a freshness filter, and the results are injected into the prompt with an explicit instruction to answer from them and to cite them as `[1]`, `[2]`. If nothing is found, the model is told to say that the information could not be verified live instead of quietly answering from memory.
 - **Six Thinking Hats (Premium 3+)**: a dedicated panel that looks at one topic from six angles at once. Every hat is a separate AI request with its own system prompt: 🤍 White Hat (fakta & data), ❤️ Red Hat (emosi & intuisi), 🖤 Black Hat (risiko), 💛 Yellow Hat (peluang), 💚 Green Hat (ide kreatif) and 💙 Blue Hat (rangkuman + langkah selanjutnya). The first five run in parallel and stream into their card, the Blue Hat runs last and summarises the other five. The whole analysis costs **six requests** of the daily quota, is stored in the conversation history as one markdown message and can be copied or regenerated. The feature is reserved for **Premium 3, Premium 4 and the administrator**: a lower tier sees the button locked with a "Butuh Premium 3" tooltip.
 - **AI Memory (Cross Conversation Memory)**: the assistant remembers the facts you ask it to keep (your name, your stack, your preferred style). Memories are extracted automatically from explicit statements, can be added with `/remember <fact>` and removed with `/forget <fact>`, and are injected into the system prompt of every following conversation. A dedicated panel lists them, with an on/off switch per entry.
 - **Command Palette (Ctrl/Cmd + K)**: a searchable palette with the most common actions (new chat, switch to agent mode, open the tools, the skills, the memory, the schedules, the trash, share, export, theme, notifications) and a **Prompt Library** with eight built-in templates plus your own, saved directly from the composer.
@@ -157,10 +158,21 @@ SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key
 
 # AES-256-GCM Encryption Key (64-character hex string)
 APP_ENCRYPTION_KEY=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+
+# Live Web Search (optional but recommended, one key is enough)
+BRAVE_SEARCH_API_KEY=your_brave_search_api_key_here
+# TAVILY_API_KEY=your_tavily_api_key_here
+# SERPER_API_KEY=your_serper_api_key_here
+# GOOGLE_CSE_API_KEY=your_google_cse_api_key_here
+# GOOGLE_CSE_ID=your_google_cse_id_here
 ```
 
 > **Tip:** You can generate a random 32-byte encryption key with:
 > `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`
+
+> **Tip (web search):** without a search key the keyless tiers (DuckDuckGo,
+> Mojeek, Wikipedia) still work, but a real search API (Brave is the cheapest)
+> delivers far fresher and better ranked results. See `.env.example`.
 
 ### 5. Run Database Migrations (Supabase)
 Apply the migrations in your Supabase SQL editor (in chronological order):
@@ -317,6 +329,7 @@ website-ai/
 │       │   ├── models.ts              # Model capability registry (with minTier)
 │       │   ├── tiers.ts               # Role & tier definitions (quota, tokens, context)
 │       │   ├── sixHats.ts             # Six Thinking Hats: the six hats & the markdown
+│       │   ├── webSearch.ts           # Tiered live web search (API keys first, free fallbacks)
 │       │   ├── usage.ts               # Token estimation & metrics
 │       │   ├── router.ts              # Fallback router engine
 │       │   ├── tools.ts               # Agent tool registry & sandboxed executors

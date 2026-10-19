@@ -291,25 +291,58 @@ export async function POST(req: NextRequest) {
 
     const lastUserMsg = contextMessages[contextMessages.length - 1];
     let liveSearchResults: any[] = [];
+    let liveSearchProvider = '';
 
     // Execute real Web Search if enabled
     if (webSearch && lastUserMsg.role === 'user') {
       try {
         const searchRes = await executeWebSearch(lastUserMsg.content, 4);
         liveSearchResults = searchRes.results;
-        if (searchRes.results.length > 0) {
-          // Inject live search context into the last user prompt
-          const lastIdx = preparedMessages.length - 1;
-          const currentContent = preparedMessages[lastIdx].content;
-          const searchContext = `[Live Grounded Web Search Results for: "${lastUserMsg.content}"]:\n${searchRes.summary}\n\nUse the above verified live web information to provide an up-to-date, cited answer.\n\n---\nUser Query: `;
+        liveSearchProvider = searchRes.provider;
 
-          if (typeof currentContent === 'string') {
-            preparedMessages[lastIdx].content = searchContext + currentContent;
-          } else if (Array.isArray(currentContent)) {
-            const firstPart = currentContent.find((p) => p.type === 'text');
-            if (firstPart) {
-              firstPart.text = searchContext + firstPart.text;
-            }
+        // The search context is injected into the last user prompt. It has to
+        // be explicit: without it the model simply answers from its training
+        // data and ignores the live results.
+        const lastIdx = preparedMessages.length - 1;
+        const currentContent = preparedMessages[lastIdx].content;
+        const today = new Date().toISOString().slice(0, 10);
+        const searchContext =
+          searchRes.results.length > 0
+            ? [
+                `[LIVE WEB SEARCH RESULTS - ${searchRes.provider.toUpperCase()}]`,
+                `Today is ${today}.`,
+                searchRes.recency
+                  ? 'The user asks for the latest information: rely on the most recent source below and state the date of every fact you report.'
+                  : '',
+                '',
+                searchRes.summary,
+                '',
+                'Rules:',
+                '- Answer the question from the results above and cite them as [1], [2], ...',
+                '- If the results do not contain the answer, say so explicitly instead of inventing one.',
+                '- Do not replace the live results with older knowledge from your training data.',
+                '',
+                '---',
+                'User Query: ',
+              ]
+                .filter((line) => line !== '')
+                .join('\n')
+            : [
+                `[LIVE WEB SEARCH - NO RESULTS FOUND]`,
+                `Today is ${today}.`,
+                `The live search for "${lastUserMsg.content}" returned no result.`,
+                'Answer from your general knowledge, but tell the user clearly that the information could not be verified live and may be outdated.',
+                '',
+                '---',
+                'User Query: ',
+              ].join('\n');
+
+        if (typeof currentContent === 'string') {
+          preparedMessages[lastIdx].content = searchContext + currentContent;
+        } else if (Array.isArray(currentContent)) {
+          const firstPart = currentContent.find((p) => p.type === 'text');
+          if (firstPart) {
+            firstPart.text = searchContext + firstPart.text;
           }
         }
       } catch (err) {
@@ -384,7 +417,10 @@ export async function POST(req: NextRequest) {
         if (liveSearchResults.length > 0) {
           controller.enqueue(
             encoder.encode(
-              `event: web_search\ndata: ${JSON.stringify({ sources: liveSearchResults })}\n\n`
+              `event: web_search\ndata: ${JSON.stringify({
+                sources: liveSearchResults,
+                provider: liveSearchProvider,
+              })}\n\n`
             )
           );
         }

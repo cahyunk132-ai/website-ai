@@ -8,6 +8,7 @@
 
 import vm from 'vm';
 import { AgentToolCall, AgentToolDescriptor } from './agentProtocol';
+import { searchWeb, WebSearchResultItem, WebSearchResponse } from './webSearch';
 import { scanWebsiteSecurity, resolveHost, SecurityReport } from './tools/security';
 import { inspectPage, PageInspection } from './tools/inspector';
 import {
@@ -30,11 +31,7 @@ export interface ToolExecutionResult {
   durationMs: number;
 }
 
-export interface WebSearchResultItem {
-  title: string;
-  url: string;
-  snippet: string;
-}
+export type { WebSearchResultItem } from './webSearch';
 
 /**
  * Catalogue of the tools the agent can call. The same list feeds the system
@@ -223,135 +220,16 @@ export function assertSafeUrl(rawUrl: string): URL {
 // ---------------------------------------------------------------------------
 
 /**
- * Real Web Search Tool using DuckDuckGo Instant Answers & HTML search fallback
+ * The real Web Search tool.
+ *
+ * The search itself runs in tiers (a search API with a key first, then the
+ * free DuckDuckGo and Wikipedia fallbacks), see `src/lib/ai/webSearch.ts`.
  */
 export async function executeWebSearch(
   query: string,
   maxResults: number = 5
-): Promise<{ results: WebSearchResultItem[]; summary: string }> {
-  const cleanQuery = query.trim();
-  if (!cleanQuery) {
-    return { results: [], summary: 'No search query provided' };
-  }
-
-  const results: WebSearchResultItem[] = [];
-
-  try {
-    // 1. Try DuckDuckGo Instant Answer API
-    const apiRes = await fetch(
-      `https://api.duckduckgo.com/?q=${encodeURIComponent(cleanQuery)}&format=json&no_redirect=1&no_html=1&skip_disambig=1`,
-      {
-        headers: { 'User-Agent': 'HyunkAIHub/1.0 (Mozilla/5.0)' },
-        signal: AbortSignal.timeout(5000),
-      }
-    );
-
-    if (apiRes.ok) {
-      const data = await apiRes.json();
-      if (data.AbstractText) {
-        results.push({
-          title: data.Heading || cleanQuery,
-          url: data.AbstractURL || 'https://duckduckgo.com/?q=' + encodeURIComponent(cleanQuery),
-          snippet: data.AbstractText,
-        });
-      }
-
-      if (Array.isArray(data.RelatedTopics)) {
-        for (const topic of data.RelatedTopics) {
-          if (topic.Text && topic.FirstURL && results.length < maxResults) {
-            results.push({
-              title: topic.Text.slice(0, 60) + '...',
-              url: topic.FirstURL,
-              snippet: topic.Text,
-            });
-          }
-        }
-      }
-    }
-  } catch {
-    // API rate limit or network timeout - fallback below
-  }
-
-  // 2. Try DuckDuckGo HTML Lite scraping fallback for comprehensive results
-  if (results.length < 3) {
-    try {
-      const htmlRes = await fetch(
-        `https://html.duckduckgo.com/html/?q=${encodeURIComponent(cleanQuery)}`,
-        {
-          headers: {
-            'User-Agent':
-              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          },
-          signal: AbortSignal.timeout(5000),
-        }
-      );
-
-      if (htmlRes.ok) {
-        const html = await htmlRes.text();
-        const regex = /<a class="result__url" href="([^"]+)"[^>]*>([\s\S]*?)<\/a>[\s\S]*?<a class="result__snippet[^"]*"[^>]*>([\s\S]*?)<\/a>/gi;
-        let match;
-        while ((match = regex.exec(html)) !== null && results.length < maxResults) {
-          let rawUrl = match[1];
-          // Unwrap duckduckgo uddg parameter if present
-          if (rawUrl.includes('uddg=')) {
-            const parsed = new URL(rawUrl, 'https://duckduckgo.com');
-            const uddg = parsed.searchParams.get('uddg');
-            if (uddg) rawUrl = decodeURIComponent(uddg);
-          }
-          const snippet = match[3].replace(/<[^>]+>/g, '').trim();
-          const title = match[2].replace(/<[^>]+>/g, '').trim();
-
-          if (rawUrl && snippet && !results.some((r) => r.url === rawUrl)) {
-            results.push({
-              title: title || cleanQuery,
-              url: rawUrl,
-              snippet,
-            });
-          }
-        }
-      }
-    } catch {
-      // Ignore
-    }
-  }
-
-  // 3. Fallback: Wikipedia Summary API if results are still empty
-  if (results.length === 0) {
-    try {
-      const wikiRes = await fetch(
-        `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(cleanQuery.replace(/\s+/g, '_'))}`,
-        {
-          headers: { 'User-Agent': 'HyunkAIHub/1.0' },
-          signal: AbortSignal.timeout(4000),
-        }
-      );
-      if (wikiRes.ok) {
-        const wikiData = await wikiRes.json();
-        if (wikiData.extract) {
-          results.push({
-            title: wikiData.title || cleanQuery,
-            url: wikiData.content_urls?.desktop?.page || 'https://en.wikipedia.org',
-            snippet: wikiData.extract,
-          });
-        }
-      }
-    } catch {
-      // Ignore
-    }
-  }
-
-  if (results.length === 0) {
-    return {
-      results: [],
-      summary: `No live search results found for query: "${cleanQuery}".`,
-    };
-  }
-
-  const summary = results
-    .map((r, i) => `[${i + 1}] ${r.title}\nSource: ${r.url}\n${r.snippet}`)
-    .join('\n\n');
-
-  return { results, summary };
+): Promise<WebSearchResponse> {
+  return searchWeb(query, maxResults);
 }
 
 // ---------------------------------------------------------------------------
