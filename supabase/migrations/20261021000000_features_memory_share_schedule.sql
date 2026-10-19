@@ -10,6 +10,9 @@
 --   * Conversation tags + trash (tags, deleted_at columns)
 -- ============================================================================
 
+-- The UUID generator is needed for the default primary keys.
+create extension if not exists "uuid-ossp";
+
 -- ---------------------------------------------------------------------------
 -- AI memory
 -- ---------------------------------------------------------------------------
@@ -21,7 +24,7 @@ create table if not exists public.user_memories (
   source text not null default 'manual',
   enabled boolean not null default true,
   created_at timestamp with time zone default timezone('utc'::text, now()) not null,
-  updated_at timestamp with time_zone default timezone('utc'::text, now()) not null
+  updated_at timestamp with time zone default timezone('utc'::text, now()) not null
 );
 
 alter table public.user_memories enable row level security;
