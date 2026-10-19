@@ -92,6 +92,8 @@
   - Syntax highlighted code blocks with one-click **Copy Code** and language badges.
   - One-click **Regenerate Response** and **Copy Message**.
   - Accessible contrast, keyboard shortcuts, and responsive mobile drawer.
+- **Collision Free Toolbar**: the header only keeps the actions that are needed all the time (**Skills**, **Tools**, **Palette**, **More**) and moves every other action (Memory, Jadwal, Share, Sampah, Export, Download, Key Pool, Telemetry, Parameter, Tema, Notifikasi, Pintasan) into a **More** menu, so the buttons can never overlap on a narrow laptop. The model selector keeps its own room and the toolbar scrolls instead of squashing.
+- **Working Sidebar Toggle**: the hamburger button collapses the sidebar on a desktop (the chat area then uses the full width) and opens the drawer on a phone. The icon follows the state and `Ctrl+B` does the same.
 
 ---
 
@@ -238,6 +240,7 @@ website-ai/
 │   │   ├── TrashModal.tsx             # Trash & restore
 │   │   ├── UsageChart.tsx             # 7 day activity chart
 │   │   ├── ContextMeter.tsx           # Context window indicator
+│   │   ├── HeaderOverflowMenu.tsx     # "More" menu for the secondary header actions
 │   │   ├── AgentReasoningCard.tsx     # Reasoning, tool outputs & agent timeline
 │   │   └── ui/
 │   │       ├── CodeBlock.tsx          # Syntax highlighted code
