@@ -10,7 +10,6 @@ import {
   EyeOff,
   Sparkles,
   ArrowRight,
-  ShieldCheck,
   AlertCircle,
   CheckCircle2,
 } from 'lucide-react';
@@ -227,24 +226,14 @@ export const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose, canClose 
           {/* Quick Demo Login Option */}
           <div className="pt-3 border-t border-slate-800/80 space-y-2">
             <p className="text-[11px] text-slate-400 text-center">Akses Cepat (Tanpa Ribet):</p>
-            <div className="grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                onClick={() => handleQuickDemo('demo@hyunkai.com', 'demo1234')}
-                className="py-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700/80 text-cyan-300 text-[11px] font-medium transition flex items-center justify-center gap-1.5"
-              >
-                <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
-                <span>Akun Demo</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => handleQuickDemo('admin@hyunkai.com', 'Password123!')}
-                className="py-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700/80 text-emerald-300 text-[11px] font-medium transition flex items-center justify-center gap-1.5"
-              >
-                <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-                <span>Akun Admin</span>
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={() => handleQuickDemo('demo@hyunkai.com', 'demo1234')}
+              className="w-full py-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700/80 text-cyan-300 text-[11px] font-medium transition flex items-center justify-center gap-1.5"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
+              <span>Akun Demo</span>
+            </button>
           </div>
         </form>
       </div>

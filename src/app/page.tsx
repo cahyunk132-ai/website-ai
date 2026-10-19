@@ -69,7 +69,6 @@ import { SchedulesPanel } from '@/components/SchedulesPanel';
 import { ShareModal } from '@/components/ShareModal';
 import { TrashModal } from '@/components/TrashModal';
 import { ContextMeter } from '@/components/ContextMeter';
-import { HeaderOverflowMenu, OverflowMenuItem } from '@/components/HeaderOverflowMenu';
 import { ChatMessage, ModelCapability, ProviderId, FileAttachment } from '@/lib/ai/types';
 import { ConversationSummary, FolderItem } from '@/lib/storage';
 import { AgentStepView, AgentSkillView } from '@/lib/ai/agentEvents';
@@ -1314,6 +1313,38 @@ export default function ChatPage() {
         run: () => setIsExportOpen(true),
       },
       {
+        id: 'download-app',
+        label: 'Download aplikasi',
+        hint: 'Windows, Android & APK',
+        group: 'Navigasi',
+        icon: Download,
+        run: () => setIsDownloadOpen(true),
+      },
+      {
+        id: 'open-keys',
+        label: 'Buka API Key Pool',
+        hint: 'Kelola kredensial provider',
+        group: 'Navigasi',
+        icon: Key,
+        run: () => setIsSettingsOpen(true),
+      },
+      {
+        id: 'open-parameters',
+        label: 'Buka Tuning & Parameter',
+        hint: 'Temperature, system prompt, max tokens',
+        group: 'Navigasi',
+        icon: SlidersHorizontal,
+        run: () => setIsParametersOpen(true),
+      },
+      {
+        id: 'shortcuts',
+        label: 'Buka pintasan keyboard',
+        hint: 'Daftar seluruh shortcut',
+        group: 'Tampilan',
+        icon: Keyboard,
+        run: () => setIsShortcutsOpen(true),
+      },
+      {
         id: 'theme',
         label: theme === 'dark' ? 'Ganti ke mode terang' : 'Ganti ke mode gelap',
         group: 'Tampilan',
@@ -1337,121 +1368,14 @@ export default function ChatPage() {
   }, [mode, theme, messages.length, conversations.length]);
 
   /**
-   * The secondary header actions. They used to sit in the toolbar as eleven
-   * buttons, which overflowed the header on a laptop and made them overlap.
+   * The toolbar buttons are icon only (the label is the tooltip), so the
+   * whole row of actions always fits and can never overlap.
    */
-  const headerOverflowItems = useMemo<OverflowMenuItem[]>(
-    () => [
-      {
-        id: 'new-chat',
-        label: 'Percakapan baru',
-        hint: 'Mulai obrolan bersih',
-        icon: Plus,
-        run: () => {
-          handleNewConversation();
-        },
-      },
-      {
-        id: 'search',
-        label: 'Cari percakapan',
-        hint: 'Buka pencarian di riwayat',
-        icon: Search,
-        run: () => {
-          setIsSidebarOpen(true);
-          setSearchFocusToken((token) => token + 1);
-        },
-      },
-      {
-        id: 'memory',
-        label: 'AI Memory',
-        hint: 'Facta yang diingat AI antar percakapan',
-        icon: Brain,
-        run: () => setIsMemoryOpen(true),
-      },
-      {
-        id: 'schedules',
-        label: 'Jadwal Otomatis',
-        hint: 'Prompt cron yang berjalan sendiri',
-        icon: CalendarClock,
-        run: () => setIsScheduleOpen(true),
-      },
-      {
-        id: 'share',
-        label: 'Bagikan percakapan',
-        hint: 'Buat tautan publik read-only',
-        icon: Share2,
-        run: () => setIsShareOpen(true),
-      },
-      {
-        id: 'trash',
-        label: 'Sampah',
-        hint: 'Pulihkan percakapan yang dihapus',
-        icon: Trash2,
-        run: () => setIsTrashOpen(true),
-      },
-      {
-        id: 'export',
-        label: 'Export percakapan',
-        hint: 'Markdown, JSON, atau PDF',
-        icon: FileText,
-        separator: true,
-        run: () => setIsExportOpen(true),
-      },
-      {
-        id: 'download',
-        label: 'Download aplikasi',
-        hint: 'Windows, Android & APK',
-        icon: Download,
-        run: () => setIsDownloadOpen(true),
-      },
-      {
-        id: 'keys',
-        label: 'API Key Pool',
-        hint: 'Kelola kredensial provider',
-        icon: Key,
-        run: () => setIsSettingsOpen(true),
-      },
-      {
-        id: 'dashboard',
-        label: 'Telemetry & Quota',
-        hint: 'Kuota, token, dan grafik aktivitas',
-        icon: BarChart3,
-        run: () => setIsDashboardOpen(true),
-      },
-      {
-        id: 'parameters',
-        label: 'Tuning & Parameter',
-        hint: 'Temperature, system prompt, max tokens',
-        icon: SlidersHorizontal,
-        run: () => setIsParametersOpen(true),
-      },
-      {
-        id: 'theme',
-        label: theme === 'dark' ? 'Mode terang' : 'Mode gelap',
-        hint: 'Ganti tema tampilan',
-        icon: theme === 'dark' ? Sun : Moon,
-        run: () => toggleTheme(),
-      },
-      {
-        id: 'notifications',
-        label: 'Notifikasi selesai',
-        hint: 'Beri tahu saat jawaban panjang selesai',
-        icon: Bell,
-        run: () => {
-          handleEnableNotifications();
-        },
-      },
-      {
-        id: 'shortcuts',
-        label: 'Pintasan keyboard',
-        hint: 'Daftar seluruh shortcut',
-        icon: Keyboard,
-        run: () => setIsShortcutsOpen(true),
-      },
-    ],
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [theme]
-  );
+  const toolbarButtonClass = `p-2 rounded-xl border text-xs transition flex items-center gap-1.5 shrink-0 ${
+    theme === 'dark'
+      ? 'bg-slate-900 hover:bg-slate-800 border-slate-800 text-slate-300'
+      : 'bg-white hover:bg-slate-100 border-slate-300 text-slate-700'
+  }`;
 
   return (
     <div
@@ -1600,15 +1524,11 @@ export default function ChatPage() {
             </div>
           </div>
 
-          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+          <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
             {/* Agent Skills Button */}
             <button
               onClick={() => setIsSkillsOpen(true)}
-              className={`p-2 sm:px-2.5 sm:py-1.5 rounded-xl border text-xs transition flex items-center gap-1.5 ${
-                theme === 'dark'
-                  ? 'bg-slate-900 hover:bg-slate-800 border-slate-800 text-slate-300'
-                  : 'bg-white hover:bg-slate-100 border-slate-300 text-slate-700'
-              }`}
+              className={toolbarButtonClass}
               title="Agent Skills & Personas"
             >
               <BookOpen className="w-3.5 h-3.5 text-amber-400 shrink-0" />
@@ -1623,11 +1543,7 @@ export default function ChatPage() {
             {/* Tools Button */}
             <button
               onClick={() => setIsToolsOpen(true)}
-              className={`p-2 sm:px-2.5 sm:py-1.5 rounded-xl border text-xs transition flex items-center gap-1.5 ${
-                theme === 'dark'
-                  ? 'bg-slate-900 hover:bg-slate-800 border-slate-800 text-slate-300'
-                  : 'bg-white hover:bg-slate-100 border-slate-300 text-slate-700'
-              }`}
+              className={toolbarButtonClass}
               title="Tool Runner - jalankan tool langsung"
             >
               <Terminal className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
@@ -1637,20 +1553,75 @@ export default function ChatPage() {
             {/* Command Palette Button */}
             <button
               onClick={() => setIsPaletteOpen(true)}
-              className={`p-2 sm:px-2.5 sm:py-1.5 rounded-xl border text-xs transition flex items-center gap-1.5 ${
-                theme === 'dark'
-                  ? 'bg-slate-900 hover:bg-slate-800 border-slate-800 text-slate-300'
-                  : 'bg-white hover:bg-slate-100 border-slate-300 text-slate-700'
-              }`}
+              className={toolbarButtonClass}
               title="Command Palette (Ctrl/Cmd + K)"
             >
               <Command className="w-3.5 h-3.5 text-violet-400 shrink-0" />
               <span className="hidden xl:inline font-medium">Palette</span>
             </button>
 
-            {/* Everything else lives in the overflow menu so the toolbar never
-                overflows and the buttons can no longer overlap. */}
-            <HeaderOverflowMenu items={headerOverflowItems} theme={theme} />
+            {/* AI Memory Button */}
+            <button
+              onClick={() => setIsMemoryOpen(true)}
+              className={toolbarButtonClass}
+              title="AI Memory - fakta yang diingat AI antar percakapan"
+            >
+              <Brain className="w-3.5 h-3.5 text-violet-400 shrink-0" />
+            </button>
+
+            {/* Scheduled Runs Button */}
+            <button
+              onClick={() => setIsScheduleOpen(true)}
+              className={toolbarButtonClass}
+              title="Jadwal Otomatis - prompt cron"
+            >
+              <CalendarClock className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+            </button>
+
+            {/* Share Button */}
+            <button
+              onClick={() => setIsShareOpen(true)}
+              className={toolbarButtonClass}
+              title="Bagikan percakapan (tautan publik)"
+            >
+              <Share2 className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+            </button>
+
+            {/* Trash Button */}
+            <button
+              onClick={() => setIsTrashOpen(true)}
+              className={toolbarButtonClass}
+              title="Sampah - pulihkan percakapan yang dihapus"
+            >
+              <Trash2 className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+            </button>
+
+            {/* Export Button */}
+            <button
+              onClick={() => setIsExportOpen(true)}
+              className={toolbarButtonClass}
+              title="Export Conversation (PDF / Markdown / JSON)"
+            >
+              <FileText className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+            </button>
+
+            {/* Download App Button */}
+            <button
+              onClick={() => setIsDownloadOpen(true)}
+              className={toolbarButtonClass}
+              title="Download Windows & Mobile Apps"
+            >
+              <Download className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+            </button>
+
+            {/* Keys Button */}
+            <button
+              onClick={() => setIsSettingsOpen(true)}
+              className={toolbarButtonClass}
+              title="Manage API Key Pool"
+            >
+              <Key className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+            </button>
 
             {/* User Profile / Auth Button */}
             {user ? (
@@ -1666,7 +1637,7 @@ export default function ChatPage() {
                 <div className="w-5 h-5 rounded-md bg-gradient-to-tr from-cyan-600 to-blue-600 flex items-center justify-center text-white font-bold text-[10px] shadow-sm">
                   {(user.name || user.email).charAt(0).toUpperCase()}
                 </div>
-                <span className="hidden sm:inline font-medium max-w-[90px] truncate">{user.name}</span>
+                <span className="hidden sm:inline font-medium max-w-[80px] truncate">{user.name}</span>
               </button>
             ) : (
               <button
