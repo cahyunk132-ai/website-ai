@@ -68,7 +68,7 @@ export const DownloadAppModal: React.FC<DownloadAppModalProps> = ({ isOpen, onCl
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 bg-slate-950/80 backdrop-blur-md animate-fadeIn">
-      <div className="relative w-full max-w-lg rounded-2xl bg-slate-900 border border-slate-800 shadow-2xl overflow-hidden text-slate-100 max-h-[92dvh] flex flex-col">
+      <div className="relative w-full max-w-lg rounded-2xl bg-slate-900 border border-slate-800 shadow-2xl overflow-hidden text-slate-100 max-h-[92dvh] flex flex-col pb-safe">
         {/* Header */}
         <div className="flex items-center justify-between px-4 sm:px-6 py-3.5 sm:py-4 border-b border-slate-800 bg-slate-950/70 shrink-0">
           <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
@@ -139,9 +139,13 @@ export const DownloadAppModal: React.FC<DownloadAppModalProps> = ({ isOpen, onCl
               {/* Windows App Card Preview */}
               <div className="p-4 rounded-xl bg-slate-950/80 border border-slate-800 flex items-center justify-between gap-3">
                 <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 rounded-xl bg-gradient-to-tr from-cyan-600 to-blue-600 flex items-center justify-center text-white font-bold text-xl shadow-md shrink-0">
-                    H
-                  </div>
+                  <img
+                    src="/icon-192.png"
+                    alt="Hyunk AI Hub"
+                    width={48}
+                    height={48}
+                    className="w-12 h-12 rounded-xl shadow-md shrink-0"
+                  />
                   <div>
                     <h3 className="font-bold text-sm text-slate-100">Hyunk AI Hub for Windows</h3>
                     <p className="text-[11px] text-slate-400">Native .NET 8 + WebView2 • Standalone Single-File</p>

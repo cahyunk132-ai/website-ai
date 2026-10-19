@@ -159,7 +159,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       <aside
         className={`fixed md:static inset-y-0 left-0 z-50 flex flex-col w-[85vw] sm:w-80 md:w-72 max-w-sm ${
           theme === 'dark' ? 'bg-slate-950 border-slate-800' : 'bg-slate-100 border-slate-300'
-        } border-r transition-transform duration-300 ease-in-out pb-safe ${
+        } border-r transition-transform duration-300 ease-in-out pt-safe pb-safe pl-safe ${
           isOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0 md:w-0 md:border-r-0 md:overflow-hidden'
         }`}
       >
@@ -222,7 +222,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               placeholder="Search chat history & messages..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className={`w-full pl-8 pr-3 py-1.5 rounded-lg text-xs transition focus:outline-none ${
+              className={`w-full pl-8 pr-3 py-1.5 rounded-lg text-base sm:text-xs transition focus:outline-none ${
                 theme === 'dark'
                   ? 'bg-slate-900 border border-slate-800 text-slate-200 placeholder-slate-500 focus:border-cyan-500'
                   : 'bg-white border border-slate-300 text-slate-800 placeholder-slate-400 focus:border-cyan-600'
@@ -255,7 +255,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   placeholder="Folder name (e.g. Work, Ideas)..."
                   value={newFolderName}
                   onChange={(e) => setNewFolderName(e.target.value)}
-                  className="w-full px-2.5 py-1 text-xs bg-slate-950 border border-slate-800 rounded-lg text-slate-100 focus:outline-none focus:border-cyan-500"
+                  className="w-full px-2.5 py-1 text-base sm:text-xs bg-slate-950 border border-slate-800 rounded-lg text-slate-100 focus:outline-none focus:border-cyan-500"
                   autoFocus
                 />
                 <div className="flex items-center justify-end gap-1.5 text-xs">

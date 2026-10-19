@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Send,
   Square,
@@ -51,6 +51,7 @@ import { ChatMessage, ModelCapability, ProviderId, FileAttachment } from '@/lib/
 import { ConversationSummary, FolderItem } from '@/lib/storage';
 import { AgentStepView, AgentSkillView } from '@/lib/ai/agentEvents';
 import { safeRandomUUID, safeCopyText } from '@/lib/safeUUID';
+import { useAndroidBackButton } from '@/lib/useAndroidBackButton';
 import { useAuth } from '@/lib/AuthContext';
 import { AuthModal } from '@/components/AuthModal';
 
@@ -106,6 +107,85 @@ export default function ChatPage() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const userScrolledUpRef = useRef<boolean>(false);
+
+  /**
+   * Android: the hardware back button must close the topmost overlay instead
+   * of leaving the application.
+   */
+  const closeTopOverlay = useCallback(() => {
+    if (lightboxImage) {
+      setLightboxImage(null);
+      return;
+    }
+    if (isSkillsOpen) {
+      setIsSkillsOpen(false);
+      return;
+    }
+    if (isParametersOpen) {
+      setIsParametersOpen(false);
+      return;
+    }
+    if (isConvSettingsOpen) {
+      setIsConvSettingsOpen(false);
+      setConvToEdit(null);
+      return;
+    }
+    if (isExportOpen) {
+      setIsExportOpen(false);
+      return;
+    }
+    if (isDashboardOpen) {
+      setIsDashboardOpen(false);
+      return;
+    }
+    if (isSettingsOpen) {
+      setIsSettingsOpen(false);
+      return;
+    }
+    if (isDownloadOpen) {
+      setIsDownloadOpen(false);
+      return;
+    }
+    if (isShortcutsOpen) {
+      setIsShortcutsOpen(false);
+      return;
+    }
+    if (isSidebarOpen) {
+      setIsSidebarOpen(false);
+      return;
+    }
+    if (isAuthModalOpen) {
+      closeAuthModal();
+    }
+  }, [
+    lightboxImage,
+    isSkillsOpen,
+    isParametersOpen,
+    isConvSettingsOpen,
+    isExportOpen,
+    isDashboardOpen,
+    isSettingsOpen,
+    isDownloadOpen,
+    isShortcutsOpen,
+    isSidebarOpen,
+    isAuthModalOpen,
+    closeAuthModal,
+  ]);
+
+  const isOverlayOpen =
+    !!lightboxImage ||
+    isSkillsOpen ||
+    isParametersOpen ||
+    isConvSettingsOpen ||
+    isExportOpen ||
+    isDashboardOpen ||
+    isSettingsOpen ||
+    isDownloadOpen ||
+    isShortcutsOpen ||
+    isSidebarOpen ||
+    isAuthModalOpen;
+
+  useAndroidBackButton(isOverlayOpen, closeTopOverlay);
 
   // Initialize theme from localStorage & sidebar on desktop
   useEffect(() => {
@@ -213,6 +293,37 @@ export default function ChatPage() {
   useEffect(() => {
     scrollToBottom();
   }, [messages, isStreaming]);
+
+  /**
+   * Android: the soft keyboard shrinks the visible viewport. When the user is
+   * at the bottom of the conversation the list is kept pinned there, otherwise
+   * the newest message would be hidden behind the keyboard.
+   */
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const viewport = window.visualViewport;
+    if (!viewport) return;
+
+    let frame = 0;
+    const handleViewportResize = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        const container = chatContainerRef.current;
+        if (!container) return;
+        const distanceToBottom =
+          container.scrollHeight - container.scrollTop - container.clientHeight;
+        if (distanceToBottom < 140) {
+          container.scrollTop = container.scrollHeight;
+        }
+      });
+    };
+
+    viewport.addEventListener('resize', handleViewportResize);
+    return () => {
+      viewport.removeEventListener('resize', handleViewportResize);
+      cancelAnimationFrame(frame);
+    };
+  }, []);
 
   // Load models catalog
   const fetchModels = async () => {
@@ -795,7 +906,7 @@ export default function ChatPage() {
 
   return (
     <div
-      className={`flex h-full w-full ${
+      className={`flex h-full w-full pt-safe px-safe ${
         theme === 'dark' ? 'bg-slate-950 text-slate-100' : 'bg-slate-50 text-slate-900'
       } overflow-hidden`}
       onDragOver={(e) => {
@@ -845,7 +956,7 @@ export default function ChatPage() {
       <main className="flex-1 flex flex-col h-full min-h-0 relative overflow-hidden">
         {/* Top Navbar */}
         <header
-          className={`flex items-center justify-between px-2.5 sm:px-4 py-2 sm:py-3 border-b ${
+          className={`flex items-center justify-between px-2.5 sm:px-4 py-2 sm:py-3 border-b compact-header ${
             theme === 'dark' ? 'border-slate-800 bg-slate-950' : 'border-slate-200 bg-white'
           } z-20 gap-1.5 sm:gap-3 shrink-0`}
         >
@@ -1117,7 +1228,7 @@ export default function ChatPage() {
         <div
           ref={chatContainerRef}
           onScroll={handleScroll}
-          className="flex-1 overflow-y-auto p-3 sm:p-5 md:p-6 space-y-4 sm:space-y-6"
+          className="flex-1 overflow-y-auto overscroll-contain p-3 sm:p-5 md:p-6 space-y-4 sm:space-y-6"
         >
           {!user && !authLoading ? (
             <div className="h-full flex flex-col items-center justify-center max-w-md mx-auto text-center px-4 py-8">
@@ -1263,7 +1374,7 @@ export default function ChatPage() {
                         )}
                         <button
                           onClick={() => handleCopyMessage(msg.id, msg.content)}
-                          className="p-1 hover:text-slate-200 transition"
+                          className="touch-target -m-1 p-1 hover:text-slate-200 transition"
                           title="Copy message"
                         >
                           {copiedId === msg.id ? (
@@ -1304,7 +1415,7 @@ export default function ChatPage() {
             </div>
           </div>
         ) : (
-          <div className="p-2 sm:p-3 md:p-4 border-t border-slate-800 bg-slate-950 pb-safe shrink-0">
+          <div className="p-2 sm:p-3 md:p-4 border-t border-slate-800 bg-slate-950 pb-safe compact-composer shrink-0">
           <div className="max-w-4xl mx-auto space-y-2">
             {/* Attachment preview chips */}
             {attachments.length > 0 && (
@@ -1323,7 +1434,7 @@ export default function ChatPage() {
                     <button
                       type="button"
                       onClick={() => removeAttachment(att.id)}
-                      className="p-0.5 rounded-full hover:bg-slate-800 text-slate-400 hover:text-white"
+                      className="touch-target -m-1 p-0.5 rounded-full hover:bg-slate-800 text-slate-400 hover:text-white"
                     >
                       <X className="w-3 h-3" />
                     </button>
@@ -1386,7 +1497,7 @@ export default function ChatPage() {
                     <button
                       type="button"
                       onClick={() => handleToggleSkillPin(slug, false)}
-                      className="ml-0.5 text-amber-500/70 hover:text-rose-400 transition"
+                      className="touch-target-sm -m-1.5 ml-0.5 text-amber-500/70 hover:text-rose-400 transition"
                       title={`Lepas persona ${slug}`}
                     >
                       <X className="w-2.5 h-2.5" />
@@ -1467,7 +1578,7 @@ export default function ChatPage() {
           <img
             src={lightboxImage}
             alt="Full size attachment"
-            className="max-w-full max-h-[90vh] rounded-2xl object-contain shadow-2xl"
+            className="max-w-full max-h-[90dvh] rounded-2xl object-contain shadow-2xl"
           />
         </div>
       )}

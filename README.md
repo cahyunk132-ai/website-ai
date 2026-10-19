@@ -59,6 +59,14 @@
 - **Agent Skills (Progressive Disclosure)**: A skill library stored in Supabase. The model only receives the *name + description* of every skill; the full body is loaded on demand the moment the agent decides to use it (`<skill_use skill="..."/>`). Users can browse, pin and author their own skills from the **Skills** panel.
 - **Preset Personas**: A pinned skill becomes a manual persona that is injected into every request (agent *and* standard chat mode).
 - **Autonomous Agent Loop**: In agent mode the model can call tools (`web_search`, `fetch_url`, `http_request`, `code_interpreter`, `calculator`, `datetime`) and load skills. Every result is fed back to the model, which continues with the next step until it produces the final answer. The UI shows the whole **Agent Execution Timeline**.
+- **Android Ready Rendering**: The interface is tuned for Android phones and for the native Android build (`com.hyunk.aihub`, a WebView wrapper around this app):
+  - The soft keyboard no longer covers the composer (`interactive-widget=resizes-content` plus a `visualViewport` listener that keeps the conversation pinned to the bottom).
+  - Safe area insets are respected for the status bar, the gesture navigation bar and the notch in landscape.
+  - No more tap flash, no pull-to-refresh glow, no double tap delay (`touch-action: manipulation`).
+  - Form controls use a 16px font on mobile, so Chrome never zooms the page in on focus.
+  - Icon buttons have a 40dp (32dp in dense rows) touch target.
+  - The Android hardware back button closes the open overlay instead of leaving the app.
+  - The launcher icons are shipped at their real resolution (192/512) plus a maskable variant, and the installed PWA may be rotated like the native build.
 - **Edge Middleware Protection**: All `/api/*` routes (except the public auth, model catalog and status endpoints) require a valid HMAC signed session cookie — unauthenticated calls are rejected with HTTP 401 before reaching a handler.
 - **Token Accounting**: Prompt/completion tokens reported by the provider are stored per message and rolled up into the daily usage log.
 - **Modern Cyber-Slate Interface**:

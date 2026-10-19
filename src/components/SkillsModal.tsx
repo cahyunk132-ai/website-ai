@@ -193,7 +193,7 @@ export const SkillsModal: React.FC<SkillsModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 bg-slate-950/80 backdrop-blur-md animate-fadeIn">
-      <div className="relative w-full max-w-3xl rounded-2xl bg-slate-900 border border-slate-800 shadow-2xl overflow-hidden text-slate-100 max-h-[92dvh] flex flex-col">
+      <div className="relative w-full max-w-3xl rounded-2xl bg-slate-900 border border-slate-800 shadow-2xl overflow-hidden text-slate-100 max-h-[92dvh] flex flex-col pb-safe">
         {/* Header */}
         <div className="flex items-center justify-between px-4 sm:px-6 py-3.5 sm:py-4 border-b border-slate-800 bg-slate-950/70 shrink-0">
           <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
@@ -230,7 +230,7 @@ export const SkillsModal: React.FC<SkillsModalProps> = ({
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Cari skill..."
-                className="w-full pl-8 pr-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-amber-500"
+                className="w-full pl-8 pr-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-base sm:text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-amber-500"
               />
             </div>
             <div className="flex gap-1.5 overflow-x-auto">
@@ -290,20 +290,20 @@ export const SkillsModal: React.FC<SkillsModalProps> = ({
                 value={draft.name}
                 onChange={(e) => setDraft((prev) => ({ ...prev, name: e.target.value }))}
                 placeholder="Nama skill (contoh: SQL Review)"
-                className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-amber-500"
+                className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 text-base sm:text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-amber-500"
               />
               <input
                 value={draft.description}
                 onChange={(e) => setDraft((prev) => ({ ...prev, description: e.target.value }))}
                 placeholder="Deskripsi singkat (agent memakai ini untuk menemukan skill)"
-                className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-amber-500"
+                className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 text-base sm:text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-amber-500"
               />
               <textarea
                 rows={7}
                 value={draft.content}
                 onChange={(e) => setDraft((prev) => ({ ...prev, content: e.target.value }))}
                 placeholder="Instruksi lengkap skill dalam Markdown..."
-                className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-amber-500 font-mono resize-y leading-relaxed"
+                className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-800 text-base sm:text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-amber-500 font-mono resize-y leading-relaxed"
               />
               <div className="flex items-center justify-end gap-2">
                 <button
@@ -341,7 +341,7 @@ export const SkillsModal: React.FC<SkillsModalProps> = ({
               Tidak ada skill yang cocok.
             </div>
           ) : (
-            <div className="space-y-2 max-h-[46vh] overflow-y-auto pr-0.5">
+            <div className="space-y-2 max-h-[46dvh] overflow-y-auto pr-0.5">
               {visibleSkills.map((skill) => {
                 const isPinned = pinnedSlugs.includes(skill.slug);
                 const isUserSkill = Boolean(skill.userId);
@@ -383,7 +383,7 @@ export const SkillsModal: React.FC<SkillsModalProps> = ({
                           <button
                             type="button"
                             onClick={() => startEdit(skill)}
-                            className="p-1.5 rounded text-slate-500 hover:text-cyan-400 hover:bg-slate-900 transition"
+                            className="touch-target-sm p-1.5 rounded text-slate-500 hover:text-cyan-400 hover:bg-slate-900 transition"
                             title="Edit skill"
                           >
                             <Pencil className="w-3.5 h-3.5" />
@@ -394,7 +394,7 @@ export const SkillsModal: React.FC<SkillsModalProps> = ({
                             type="button"
                             onClick={() => handleDelete(skill)}
                             disabled={saving}
-                            className="p-1.5 rounded text-slate-500 hover:text-rose-400 hover:bg-slate-900 transition"
+                            className="touch-target-sm p-1.5 rounded text-slate-500 hover:text-rose-400 hover:bg-slate-900 transition"
                             title="Hapus skill"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
@@ -403,7 +403,7 @@ export const SkillsModal: React.FC<SkillsModalProps> = ({
                         <button
                           type="button"
                           onClick={() => handleTogglePin(skill)}
-                          className={`p-1.5 rounded transition ${
+                          className={`touch-target-sm p-1.5 rounded transition ${
                             isPinned
                               ? 'text-amber-400 bg-amber-950/60 border border-amber-800/50'
                               : 'text-slate-500 hover:text-amber-400 hover:bg-slate-900'
