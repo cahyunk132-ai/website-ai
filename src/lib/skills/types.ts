@@ -20,6 +20,8 @@ export type SkillCategory =
   | 'data'
   | 'productivity'
   | 'security'
+  | 'devops'
+  | 'language'
   | 'general';
 
 /**
