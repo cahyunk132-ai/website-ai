@@ -19,6 +19,14 @@ import {
   Layers,
   ListTree,
   Clock,
+  ShieldCheck,
+  Server,
+  ScanSearch,
+  Hash,
+  Braces,
+  Ruler,
+  KeyRound,
+  CalendarClock,
 } from 'lucide-react';
 import { MarkdownRenderer } from './ui/MarkdownRenderer';
 import { AgentStepView, AgentSkillView } from '@/lib/ai/agentEvents';
@@ -97,6 +105,30 @@ export function parseAgentContent(raw: string): ParsedAgentContent {
 
 function ToolIcon({ tool }: { tool: string }) {
   const name = tool.toLowerCase();
+  if (name.includes('security') || name.includes('shield')) {
+    return <ShieldCheck className="w-3.5 h-3.5" />;
+  }
+  if (name.includes('dns') || name.includes('server')) {
+    return <Server className="w-3.5 h-3.5" />;
+  }
+  if (name.includes('inspect') || name.includes('page')) {
+    return <ScanSearch className="w-3.5 h-3.5" />;
+  }
+  if (name.includes('hash') || name.includes('base64') || name.includes('crypto')) {
+    return <Hash className="w-3.5 h-3.5" />;
+  }
+  if (name.includes('json') || name.includes('regex') || name.includes('diff')) {
+    return <Braces className="w-3.5 h-3.5" />;
+  }
+  if (name.includes('convert') || name.includes('unit')) {
+    return <Ruler className="w-3.5 h-3.5" />;
+  }
+  if (name.includes('password') || name.includes('key')) {
+    return <KeyRound className="w-3.5 h-3.5" />;
+  }
+  if (name.includes('cron') || name.includes('schedule')) {
+    return <CalendarClock className="w-3.5 h-3.5" />;
+  }
   if (name.includes('code') || name.includes('interpreter')) {
     return <Code2 className="w-3.5 h-3.5" />;
   }
