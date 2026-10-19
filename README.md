@@ -56,6 +56,9 @@
 - **Full Conversation History**: Persisted in Supabase PostgreSQL with strict Row Level Security (RLS) policies, or in-memory fallback during local development.
 - **Persistent Folders & Parameters**: Conversations are grouped in per-user folders (`conversation_folders`) and remember their own system prompt and temperature, persisted in PostgreSQL.
 - **Per-User Daily Quota**: Every AI request is accounted in `usage_logs` (atomic RPC, race free). The default limit is 200 requests/day per user and answers with HTTP 429 once exhausted.
+- **Agent Skills (Progressive Disclosure)**: A skill library stored in Supabase. The model only receives the *name + description* of every skill; the full body is loaded on demand the moment the agent decides to use it (`<skill_use skill="..."/>`). Users can browse, pin and author their own skills from the **Skills** panel.
+- **Preset Personas**: A pinned skill becomes a manual persona that is injected into every request (agent *and* standard chat mode).
+- **Autonomous Agent Loop**: In agent mode the model can call tools (`web_search`, `fetch_url`, `http_request`, `code_interpreter`, `calculator`, `datetime`) and load skills. Every result is fed back to the model, which continues with the next step until it produces the final answer. The UI shows the whole **Agent Execution Timeline**.
 - **Edge Middleware Protection**: All `/api/*` routes (except the public auth, model catalog and status endpoints) require a valid HMAC signed session cookie — unauthenticated calls are rejected with HTTP 401 before reaching a handler.
 - **Token Accounting**: Prompt/completion tokens reported by the provider are stored per message and rolled up into the daily usage log.
 - **Modern Cyber-Slate Interface**:
@@ -126,6 +129,7 @@ Apply the migrations in your Supabase SQL editor (in chronological order):
 ```bash
 supabase/migrations/20261018000000_init_hyunk_ai_hub.sql   # base schema
 supabase/migrations/20261019000001_fix_and_features.sql    # folders, quota, multi-key pool
+supabase/migrations/20261020000000_agent_skills.sql        # skill library + 12 seeded skills
 ```
 Or via the Supabase CLI:
 ```bash
@@ -137,6 +141,12 @@ The second migration adds:
 - the persistent `conversation_folders` table (per-user folders)
 - the `usage_logs` table with the atomic `increment_daily_usage` / `add_usage_tokens` RPC helpers
 - multi-key support for `provider_settings` (unique on `(provider, encrypted_api_key)`)
+
+The third migration adds the `skills` table (system skills, user skills and pinned
+presets) with RLS policies and an idempotent seed of the 12 built-in skills
+(code review, debugging, test authoring, API design, security audit, deep research,
+technical writing, SEO content, data analysis, SQL analyst, product spec and prompt
+engineering).
 
 > **Note:** `SUPABASE_SERVICE_ROLE_KEY` is required for the folder persistence, the daily
 > quota accounting and the encrypted credential pool — those tables are restricted to the
@@ -175,6 +185,7 @@ website-ai/
 │   │   │   ├── status/route.ts        # Real-time telemetry and quota metrics
 │   │   │   ├── settings/route.ts      # Encrypted credential management
 │   │   │   ├── folders/               # Persistent per-user folder endpoints
+│   │   │   ├── skills/                # Skill library endpoints (list/create/pin)
 │   │   │   └── conversations/         # Conversation CRUD endpoints
 │   │   ├── globals.css                # Dark theme & styling
 │   │   ├── layout.tsx                 # Root layout & metadata
@@ -184,6 +195,8 @@ website-ai/
 │   │   ├── ModelSelector.tsx          # Provider & model picker
 │   │   ├── UsageDashboardModal.tsx    # Quota telemetry modal
 │   │   ├── SettingsModal.tsx          # API key encryption modal
+│   │   ├── SkillsModal.tsx            # Skill library: browse, pin, author
+│   │   ├── AgentReasoningCard.tsx     # Reasoning, tool outputs & agent timeline
 │   │   └── ui/
 │   │       ├── CodeBlock.tsx          # Syntax highlighted code
 │   │       └── MarkdownRenderer.tsx   # GFM markdown renderer
@@ -195,9 +208,17 @@ website-ai/
 │       │   ├── models.ts              # Model capability registry
 │       │   ├── usage.ts               # Token estimation & metrics
 │       │   ├── router.ts              # Fallback router engine
+│       │   ├── tools.ts               # Agent tool registry & sandboxed executors
+│       │   ├── agent.ts               # Autonomous multi-step agent loop
+│       │   ├── agentProtocol.ts       # Agent protocol parser & prompt builders
+│       │   ├── agentEvents.ts         # Shared agent view types
 │       │   └── providers/
 │       │       ├── radox.ts           # Radox AI adapter
 │       │       └── inkstone.ts        # Intern InkStone adapter
+│       ├── skills/
+│       │   ├── types.ts               # Skill contracts
+│       │   ├── builtins.ts            # 12 built-in skill definitions
+│       │   └── registry.ts            # Supabase skill registry & fallbacks
 │       ├── auth.ts                    # Login/register, Supabase seeding, sessions
 │       ├── sessionToken.ts            # Edge safe HMAC session tokens
 │       ├── conversationTitle.ts       # Shared title generator
@@ -206,7 +227,8 @@ website-ai/
 ├── supabase/
 │   └── migrations/
 │       ├── 20261018000000_init_hyunk_ai_hub.sql
-│       └── 20261019000001_fix_and_features.sql
+│       ├── 20261019000001_fix_and_features.sql
+│       └── 20261020000000_agent_skills.sql
 ├── vitest.config.ts
 ├── tailwind.config.ts
 └── next.config.mjs
