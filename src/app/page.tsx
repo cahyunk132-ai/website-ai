@@ -7,7 +7,6 @@ import {
   RotateCcw,
   Copy,
   Check,
-  Menu,
   Sparkles,
   AlertCircle,
   ShieldAlert,
@@ -45,6 +44,11 @@ import {
   Tag,
   Plus,
   Search,
+  BarChart3,
+  Sun,
+  Moon,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from 'lucide-react';
 import { Sidebar } from '@/components/Sidebar';
 import { ModelSelector } from '@/components/ModelSelector';
@@ -65,6 +69,7 @@ import { SchedulesPanel } from '@/components/SchedulesPanel';
 import { ShareModal } from '@/components/ShareModal';
 import { TrashModal } from '@/components/TrashModal';
 import { ContextMeter } from '@/components/ContextMeter';
+import { HeaderOverflowMenu, OverflowMenuItem } from '@/components/HeaderOverflowMenu';
 import { ChatMessage, ModelCapability, ProviderId, FileAttachment } from '@/lib/ai/types';
 import { ConversationSummary, FolderItem } from '@/lib/storage';
 import { AgentStepView, AgentSkillView } from '@/lib/ai/agentEvents';
@@ -1331,6 +1336,123 @@ export default function ChatPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, theme, messages.length, conversations.length]);
 
+  /**
+   * The secondary header actions. They used to sit in the toolbar as eleven
+   * buttons, which overflowed the header on a laptop and made them overlap.
+   */
+  const headerOverflowItems = useMemo<OverflowMenuItem[]>(
+    () => [
+      {
+        id: 'new-chat',
+        label: 'Percakapan baru',
+        hint: 'Mulai obrolan bersih',
+        icon: Plus,
+        run: () => {
+          handleNewConversation();
+        },
+      },
+      {
+        id: 'search',
+        label: 'Cari percakapan',
+        hint: 'Buka pencarian di riwayat',
+        icon: Search,
+        run: () => {
+          setIsSidebarOpen(true);
+          setSearchFocusToken((token) => token + 1);
+        },
+      },
+      {
+        id: 'memory',
+        label: 'AI Memory',
+        hint: 'Facta yang diingat AI antar percakapan',
+        icon: Brain,
+        run: () => setIsMemoryOpen(true),
+      },
+      {
+        id: 'schedules',
+        label: 'Jadwal Otomatis',
+        hint: 'Prompt cron yang berjalan sendiri',
+        icon: CalendarClock,
+        run: () => setIsScheduleOpen(true),
+      },
+      {
+        id: 'share',
+        label: 'Bagikan percakapan',
+        hint: 'Buat tautan publik read-only',
+        icon: Share2,
+        run: () => setIsShareOpen(true),
+      },
+      {
+        id: 'trash',
+        label: 'Sampah',
+        hint: 'Pulihkan percakapan yang dihapus',
+        icon: Trash2,
+        run: () => setIsTrashOpen(true),
+      },
+      {
+        id: 'export',
+        label: 'Export percakapan',
+        hint: 'Markdown, JSON, atau PDF',
+        icon: FileText,
+        separator: true,
+        run: () => setIsExportOpen(true),
+      },
+      {
+        id: 'download',
+        label: 'Download aplikasi',
+        hint: 'Windows, Android & APK',
+        icon: Download,
+        run: () => setIsDownloadOpen(true),
+      },
+      {
+        id: 'keys',
+        label: 'API Key Pool',
+        hint: 'Kelola kredensial provider',
+        icon: Key,
+        run: () => setIsSettingsOpen(true),
+      },
+      {
+        id: 'dashboard',
+        label: 'Telemetry & Quota',
+        hint: 'Kuota, token, dan grafik aktivitas',
+        icon: BarChart3,
+        run: () => setIsDashboardOpen(true),
+      },
+      {
+        id: 'parameters',
+        label: 'Tuning & Parameter',
+        hint: 'Temperature, system prompt, max tokens',
+        icon: SlidersHorizontal,
+        run: () => setIsParametersOpen(true),
+      },
+      {
+        id: 'theme',
+        label: theme === 'dark' ? 'Mode terang' : 'Mode gelap',
+        hint: 'Ganti tema tampilan',
+        icon: theme === 'dark' ? Sun : Moon,
+        run: () => toggleTheme(),
+      },
+      {
+        id: 'notifications',
+        label: 'Notifikasi selesai',
+        hint: 'Beri tahu saat jawaban panjang selesai',
+        icon: Bell,
+        run: () => {
+          handleEnableNotifications();
+        },
+      },
+      {
+        id: 'shortcuts',
+        label: 'Pintasan keyboard',
+        hint: 'Daftar seluruh shortcut',
+        icon: Keyboard,
+        run: () => setIsShortcutsOpen(true),
+      },
+    ],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [theme]
+  );
+
   return (
     <div
       className={`flex h-full w-full pt-safe px-safe ${
@@ -1389,7 +1511,7 @@ export default function ChatPage() {
         <header
           className={`flex items-center justify-between px-2.5 sm:px-4 py-2 sm:py-3 border-b compact-header ${
             theme === 'dark' ? 'border-slate-800 bg-slate-950' : 'border-slate-200 bg-white'
-          } z-20 gap-1.5 sm:gap-3 shrink-0`}
+          } z-20 gap-1.5 sm:gap-3 shrink-0 overflow-x-auto no-scrollbar`}
         >
           <div className="flex items-center gap-1.5 sm:gap-2.5 min-w-0">
             <button
@@ -1399,9 +1521,19 @@ export default function ChatPage() {
                   ? 'text-slate-400 hover:text-white hover:bg-slate-900 border-slate-800'
                   : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 border-slate-300'
               }`}
-              title="Toggle Sidebar (Ctrl+B)"
+              title={
+                isSidebarOpen
+                  ? 'Sembunyikan sidebar (Ctrl+B)'
+                  : 'Tampilkan sidebar (Ctrl+B)'
+              }
+              aria-label={isSidebarOpen ? 'Sembunyikan sidebar' : 'Tampilkan sidebar'}
+              aria-expanded={isSidebarOpen}
             >
-              <Menu className="w-4 h-4" />
+              {isSidebarOpen ? (
+                <PanelLeftClose className="w-4 h-4" />
+              ) : (
+                <PanelLeftOpen className="w-4 h-4" />
+              )}
             </button>
 
             {/* Model Selector */}
@@ -1427,7 +1559,7 @@ export default function ChatPage() {
               title="Tuning & Parameters (Temperature, System Prompt)"
             >
               <SlidersHorizontal className="w-3.5 h-3.5 text-cyan-400" />
-              <span className="hidden sm:inline font-mono text-[11px]">T={temperature}</span>
+              <span className="hidden md:inline font-mono text-[11px]">T={temperature}</span>
             </button>
 
             {/* Mode Switcher: Chat vs Agent Mode */}
@@ -1447,7 +1579,7 @@ export default function ChatPage() {
                 title="Standard Conversational Chat Mode"
               >
                 <Sparkles className="w-3.5 h-3.5 text-white shrink-0" />
-                <span className="hidden xs:inline">Chat</span>
+                <span className="hidden lg:inline">Chat</span>
               </button>
               <button
                 type="button"
@@ -1460,7 +1592,7 @@ export default function ChatPage() {
                 title="Autonomous Agent Mode with Real Tool Execution"
               >
                 <Bot className="w-3.5 h-3.5 text-violet-300 shrink-0" />
-                <span className="hidden xs:inline">Agent</span>
+                <span className="hidden lg:inline">Agent</span>
                 {mode === 'agent' && (
                   <span className="w-1.5 h-1.5 rounded-full bg-violet-300 animate-ping hidden sm:inline-block" />
                 )}
@@ -1480,7 +1612,7 @@ export default function ChatPage() {
               title="Agent Skills & Personas"
             >
               <BookOpen className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-              <span className="hidden md:inline font-medium">Skills</span>
+              <span className="hidden lg:inline font-medium">Skills</span>
               {pinnedSkills.length > 0 && (
                 <span className="text-[9px] font-mono px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/30 font-semibold">
                   {pinnedSkills.length}
@@ -1499,7 +1631,7 @@ export default function ChatPage() {
               title="Tool Runner - jalankan tool langsung"
             >
               <Terminal className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
-              <span className="hidden md:inline font-medium">Tools</span>
+              <span className="hidden lg:inline font-medium">Tools</span>
             </button>
 
             {/* Command Palette Button */}
@@ -1513,112 +1645,18 @@ export default function ChatPage() {
               title="Command Palette (Ctrl/Cmd + K)"
             >
               <Command className="w-3.5 h-3.5 text-violet-400 shrink-0" />
-              <span className="hidden lg:inline font-medium">Palette</span>
+              <span className="hidden xl:inline font-medium">Palette</span>
             </button>
 
-            {/* AI Memory Button */}
-            <button
-              onClick={() => setIsMemoryOpen(true)}
-              className={`p-2 sm:px-2.5 sm:py-1.5 rounded-xl border text-xs transition flex items-center gap-1.5 ${
-                theme === 'dark'
-                  ? 'bg-slate-900 hover:bg-slate-800 border-slate-800 text-slate-300'
-                  : 'bg-white hover:bg-slate-100 border-slate-300 text-slate-700'
-              }`}
-              title="AI Memory - fakta yang diingat AI"
-            >
-              <Brain className="w-3.5 h-3.5 text-violet-400 shrink-0" />
-              <span className="hidden xl:inline font-medium">Memory</span>
-            </button>
-
-            {/* Schedules Button */}
-            <button
-              onClick={() => setIsScheduleOpen(true)}
-              className={`p-2 sm:px-2.5 sm:py-1.5 rounded-xl border text-xs transition flex items-center gap-1.5 ${
-                theme === 'dark'
-                  ? 'bg-slate-900 hover:bg-slate-800 border-slate-800 text-slate-300'
-                  : 'bg-white hover:bg-slate-100 border-slate-300 text-slate-700'
-              }`}
-              title="Jadwal otomatis (cron)"
-            >
-              <CalendarClock className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-              <span className="hidden xl:inline font-medium">Jadwal</span>
-            </button>
-
-            {/* Share Button */}
-            <button
-              onClick={() => setIsShareOpen(true)}
-              className={`p-2 sm:px-2.5 sm:py-1.5 rounded-xl border text-xs transition flex items-center gap-1.5 ${
-                theme === 'dark'
-                  ? 'bg-slate-900 hover:bg-slate-800 border-slate-800 text-slate-300'
-                  : 'bg-white hover:bg-slate-100 border-slate-300 text-slate-700'
-              }`}
-              title="Bagikan percakapan (tautan publik)"
-            >
-              <Share2 className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
-              <span className="hidden xl:inline font-medium">Share</span>
-            </button>
-
-            {/* Trash Button */}
-            <button
-              onClick={() => setIsTrashOpen(true)}
-              className={`p-2 sm:px-2.5 sm:py-1.5 rounded-xl border text-xs transition flex items-center gap-1.5 ${
-                theme === 'dark'
-                  ? 'bg-slate-900 hover:bg-slate-800 border-slate-800 text-slate-300'
-                  : 'bg-white hover:bg-slate-100 border-slate-300 text-slate-700'
-              }`}
-              title="Sampah - pulihkan percakapan yang dihapus"
-            >
-              <Trash2 className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-              <span className="hidden 2xl:inline font-medium">Sampah</span>
-            </button>
-
-            {/* Export Button */}
-            <button
-              onClick={() => setIsExportOpen(true)}
-              className={`p-2 sm:px-2.5 sm:py-1.5 rounded-xl border text-xs transition flex items-center gap-1.5 ${
-                theme === 'dark'
-                  ? 'bg-slate-900 hover:bg-slate-800 border-slate-800 text-slate-300'
-                  : 'bg-white hover:bg-slate-100 border-slate-300 text-slate-700'
-              }`}
-              title="Export Conversation (PDF / Markdown / JSON)"
-            >
-              <Download className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
-              <span className="hidden md:inline font-medium">Export</span>
-            </button>
-
-            {/* Download App Button */}
-            <button
-              onClick={() => setIsDownloadOpen(true)}
-              className={`p-2 sm:px-2.5 sm:py-1.5 rounded-xl border text-xs transition flex items-center gap-1.5 ${
-                theme === 'dark'
-                  ? 'bg-slate-900 hover:bg-slate-800 border-slate-800 text-emerald-300 hover:text-emerald-200'
-                  : 'bg-white hover:bg-slate-100 border-slate-300 text-emerald-700'
-              }`}
-              title="Download Windows &amp; Mobile Apps"
-            >
-              <Download className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
-              <span className="hidden lg:inline font-medium">Download</span>
-            </button>
-
-            {/* Keys Button */}
-            <button
-              onClick={() => setIsSettingsOpen(true)}
-              className={`p-2 sm:px-2.5 sm:py-1.5 rounded-xl border text-xs transition flex items-center gap-1.5 ${
-                theme === 'dark'
-                  ? 'bg-slate-900 hover:bg-slate-800 border-slate-800 text-slate-300'
-                  : 'bg-white hover:bg-slate-100 border-slate-300 text-slate-700'
-              }`}
-              title="Manage API Key Pool"
-            >
-              <Key className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
-              <span className="hidden xl:inline">Key Pool</span>
-            </button>
+            {/* Everything else lives in the overflow menu so the toolbar never
+                overflows and the buttons can no longer overlap. */}
+            <HeaderOverflowMenu items={headerOverflowItems} theme={theme} />
 
             {/* User Profile / Auth Button */}
             {user ? (
               <button
                 onClick={openAuthModal}
-                className={`p-1 sm:px-2.5 sm:py-1 rounded-xl border text-xs transition flex items-center gap-1.5 ${
+                className={`p-1 sm:px-2.5 sm:py-1 rounded-xl border text-xs transition flex items-center gap-1.5 shrink-0 ${
                   theme === 'dark'
                     ? 'bg-slate-900 hover:bg-slate-800 border-slate-800 text-slate-200'
                     : 'bg-white hover:bg-slate-100 border-slate-300 text-slate-800'

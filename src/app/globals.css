@@ -50,6 +50,22 @@ pre {
   margin: 0;
 }
 
+/* Fade in animation. 25 components use `animate-fadeIn` for their overlays,
+   but the keyframes were never defined, so the class did nothing at all.
+   Only the opacity is animated, so it can never fight a transform utility. */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.18s ease-out;
+}
+
 /* Mobile & Touch Utilities */
 .no-scrollbar::-webkit-scrollbar {
   display: none;

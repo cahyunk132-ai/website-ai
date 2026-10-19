@@ -186,12 +186,21 @@ export const Sidebar: React.FC<SidebarProps> = ({
         />
       )}
 
-      {/* Sidebar Container */}
+      {/*
+        Sidebar Container.
+
+        The collapsed state uses `md:hidden` on purpose. A zero width utility
+        for the md breakpoint cannot be used here, because the base classes
+        also carry a fixed width for the md breakpoint and in the generated
+        stylesheet that fixed width is emitted AFTER the zero width one. The
+        sidebar would then keep its full width on a desktop and the burger
+        button would look like it did nothing.
+      */}
       <aside
         className={`fixed md:static inset-y-0 left-0 z-50 flex flex-col w-[85vw] sm:w-80 md:w-72 max-w-sm ${
           theme === 'dark' ? 'bg-slate-950 border-slate-800' : 'bg-slate-100 border-slate-300'
         } border-r transition-transform duration-300 ease-in-out pt-safe pb-safe pl-safe ${
-          isOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0 md:w-0 md:border-r-0 md:overflow-hidden'
+          isOpen ? 'translate-x-0' : '-translate-x-full md:hidden'
         }`}
       >
         {/* Brand Header */}

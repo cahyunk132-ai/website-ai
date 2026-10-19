@@ -60,7 +60,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-800 hover:border-cyan-500/50 text-xs text-slate-200 transition shadow-sm max-w-[130px] xs:max-w-[180px] sm:max-w-none"
+        className="flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-800 hover:border-cyan-500/50 text-xs text-slate-200 transition shadow-sm max-w-[120px] sm:max-w-[180px] lg:max-w-none"
       >
         <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
         <span className="font-semibold text-slate-100 truncate text-[11px] sm:text-xs">
