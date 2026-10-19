@@ -56,7 +56,7 @@
 - **Full Conversation History**: Persisted in Supabase PostgreSQL with strict Row Level Security (RLS) policies, or in-memory fallback during local development.
 - **Persistent Folders & Parameters**: Conversations are grouped in per-user folders (`conversation_folders`) and remember their own system prompt and temperature, persisted in PostgreSQL.
 - **Per-User Daily Quota**: Every AI request is accounted in `usage_logs` (atomic RPC, race free). The default limit is 200 requests/day per user and answers with HTTP 429 once exhausted.
-- **Agent Skills (Progressive Disclosure)**: A skill library stored in Supabase. The model only receives the *name + description* of every skill; the full body is loaded on demand the moment the agent decides to use it (`<skill_use skill="..."/>`). Users can browse, pin and author their own skills from the **Skills** panel.
+- **Agent Skills (Progressive Disclosure)**: A skill library stored in Supabase. The model only receives the *name + description* of every skill; the full body is loaded on demand the moment the agent decides to use it (`<skill_use skill="..."/>`). **28 built-in skills** ship with the platform (engineering, devops, data, writing, research, security, productivity, language) and users can browse, pin and author their own skills from the **Skills** panel.
 - **Preset Personas**: A pinned skill becomes a manual persona that is injected into every request (agent *and* standard chat mode).
 - **Autonomous Agent Loop**: In agent mode the model can call tools (`web_search`, `fetch_url`, `http_request`, `code_interpreter`, `calculator`, `datetime`) and load skills. Every result is fed back to the model, which continues with the next step until it produces the final answer. The UI shows the whole **Agent Execution Timeline**.
 - **AI Memory (Cross Conversation Memory)**: the assistant remembers the facts you ask it to keep (your name, your stack, your preferred style). Memories are extracted automatically from explicit statements, can be added with `/remember <fact>` and removed with `/forget <fact>`, and are injected into the system prompt of every following conversation. A dedicated panel lists them, with an on/off switch per entry.
@@ -170,6 +170,7 @@ supabase/migrations/20261019000002_roles.sql               # role & tier (user_r
 supabase/migrations/20261020000000_agent_skills.sql        # skill library + 12 seeded skills
 supabase/migrations/20261021000000_features_memory_share_schedule.sql  # memory, prompts, shares, feedback, schedules, tags, trash
 supabase/migrations/20261022000000_premium_plans.sql        # subscription plans (free / premium)
+supabase/migrations/20261024000000_agent_skills_expansion.sql  # full skill catalogue (28 skills)
 ```
 Or via the Supabase CLI:
 ```bash
@@ -211,6 +212,18 @@ links), `message_feedback` (thumbs up / down), `scheduled_runs` (cron) plus the
 `tags` and `deleted_at` columns on `conversations` (tags and trash). Every statement
 is idempotent (`if not exists` + a policy guard), so the file can safely be applied
 again.
+
+The last migration expands the catalogue to **28 built-in skills** and re-seeds the
+whole library, so the database always matches `src/lib/skills/builtins.ts`. The 16
+new skills are: refactoring, performance profiling, architecture design, dependency
+upgrade, git workflow, docker containers, CI/CD, observability, machine learning, LLM
+evaluation, data pipeline, business analysis, UX writing, email writer, translation &
+localization and Indonesian content. Two categories are added with them: `devops` and
+`language`.
+
+> The seed file is generated: run `node scripts/generate-skill-migration.js` after
+> editing `src/lib/skills/builtins.ts`, and `npm test` fails when the SQL and the
+> TypeScript library drift apart.
 
 > **Note:** `SUPABASE_SERVICE_ROLE_KEY` is required for the folder persistence, the daily
 > quota accounting and the encrypted credential pool — those tables are restricted to the
@@ -315,7 +328,7 @@ website-ai/
 │       │       └── inkstone.ts        # Intern InkStone adapter
 │       ├── skills/
 │       │   ├── types.ts               # Skill contracts
-│       │   ├── builtins.ts            # 12 built-in skill definitions
+│       │   ├── builtins.ts            # 28 built-in skill definitions
 │       │   └── registry.ts            # Supabase skill registry & fallbacks
 │       ├── auth.ts                    # Login/register, Supabase seeding, sessions
 │       ├── sessionToken.ts            # Edge safe HMAC session tokens
@@ -328,12 +341,15 @@ website-ai/
 │       ├── scheduleRunner.ts          # Cron evaluation & execution
 │       ├── crypto.ts                  # AES-256-GCM encryption & redaction
 │       └── storage.ts                 # Database & in-memory persistence
+├── scripts/
+│   └── generate-skill-migration.js  # regenerates the SQL seed of the skills
 ├── supabase/
 │   └── migrations/
 │       ├── 20261018000000_init_hyunk_ai_hub.sql
 │       ├── 20261019000001_fix_and_features.sql
 │       ├── 20261020000000_agent_skills.sql
-│       └── 20261021000000_features_memory_share_schedule.sql
+│       ├── 20261021000000_features_memory_share_schedule.sql
+│       └── 20261024000000_agent_skills_expansion.sql
 ├── vitest.config.ts
 ├── tailwind.config.ts
 └── next.config.mjs

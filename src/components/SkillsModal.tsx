@@ -50,6 +50,24 @@ const EMPTY_DRAFT = {
   category: 'general',
 };
 
+/** Human readable (Indonesian) label for every known skill category. */
+const CATEGORY_LABELS: Record<string, string> = {
+  all: 'Semua',
+  engineering: 'Engineering',
+  research: 'Riset',
+  writing: 'Writing',
+  data: 'Data',
+  productivity: 'Produktivitas',
+  security: 'Keamanan',
+  devops: 'DevOps',
+  language: 'Bahasa',
+  general: 'Umum',
+};
+
+/** Falls back to the raw category for custom skills. */
+const categoryLabel = (category: string): string =>
+  CATEGORY_LABELS[category] ?? category;
+
 export const SkillsModal: React.FC<SkillsModalProps> = ({
   isOpen,
   onClose,
@@ -245,7 +263,7 @@ export const SkillsModal: React.FC<SkillsModalProps> = ({
                       : 'bg-slate-900 text-slate-400 border-slate-800 hover:text-slate-200'
                   }`}
                 >
-                  {category}
+                  {categoryLabel(category)}
                 </button>
               ))}
             </div>
@@ -359,7 +377,7 @@ export const SkillsModal: React.FC<SkillsModalProps> = ({
                             /{skill.slug}
                           </span>
                           <span className="text-[9px] px-1.5 py-0.5 rounded border font-sans font-bold bg-slate-900 text-slate-400 border-slate-700/60">
-                            {skill.category}
+                            {categoryLabel(skill.category)}
                           </span>
                           {isUserSkill ? (
                             <span className="inline-flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded bg-purple-950/80 text-purple-300 border border-purple-800/40 font-sans font-bold">
