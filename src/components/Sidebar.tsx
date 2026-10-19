@@ -47,6 +47,8 @@ interface SidebarProps {
   searchFocusToken?: number;
   onOpenMemory?: () => void;
   onOpenSchedules?: () => void;
+  /** Opens the premium panel (plan, quota and upgrade). */
+  onOpenPremium?: () => void;
   isOpen: boolean;
   onToggleOpen: () => void;
   theme: 'dark' | 'light';
@@ -72,6 +74,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   searchFocusToken = 0,
   onOpenMemory,
   onOpenSchedules,
+  onOpenPremium,
   isOpen,
   onToggleOpen,
   theme,
@@ -556,7 +559,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </button>
 
           <div className="pt-2 border-t border-slate-800/80">
-            <UserProfileMenu />
+            <UserProfileMenu onOpenPremium={onOpenPremium} />
           </div>
         </div>
       </aside>

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { loginUser, buildSessionCookieHeader } from '@/lib/auth';
+import { ensureSeededPlan, isPremiumPlan } from '@/lib/plans';
 
 export async function POST(req: Request) {
   try {
@@ -14,10 +15,11 @@ export async function POST(req: Request) {
     }
 
     const { user, token } = await loginUser(email, password);
+    const plan = await ensureSeededPlan(user.id, user.email);
 
     const response = NextResponse.json({
       success: true,
-      user,
+      user: { ...user, plan, premium: isPremiumPlan(plan) },
       token,
       message: 'Login berhasil.',
     });

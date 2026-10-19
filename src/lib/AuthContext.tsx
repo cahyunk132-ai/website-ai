@@ -9,6 +9,8 @@ export interface UserSession {
   role: 'admin' | 'user';
   avatarUrl?: string;
   createdAt: string;
+  /** 'free' (5 prompt/hari) or 'premium' (10x kuota). */
+  plan?: 'free' | 'premium';
 }
 
 interface AuthContextType {

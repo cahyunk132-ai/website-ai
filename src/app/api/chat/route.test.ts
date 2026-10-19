@@ -7,6 +7,14 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const scriptedAnswers: string[] = [];
 
+/** Mutable state for the plan and the quota of the account under test. */
+const quotaState = vi.hoisted(() => ({
+  plan: 'free' as 'free' | 'premium',
+  allowed: true,
+  remaining: 4,
+  limit: 5,
+}));
+
 vi.mock('@/lib/ai/router', () => ({
   defaultRouter: {
     streamChat: async (_options: any, onChunk: (chunk: any) => void) => {
@@ -37,13 +45,24 @@ vi.mock('@/lib/storage', () => ({
   saveMessage: async () => undefined,
   createConversation: async (title: string) => ({ id: 'conv-1', title }),
   checkAndIncrementUsage: async () => ({
-    allowed: true,
-    remaining: 199,
-    limit: 200,
+    allowed: quotaState.allowed,
+    remaining: quotaState.remaining,
+    limit: quotaState.limit,
     requestCount: 1,
     tokensUsed: 0,
     date: '2026-10-19',
   }),
+}));
+
+vi.mock('@/lib/plans', () => ({
+  getUserPlan: async () => quotaState.plan,
+  planFor: (id: string) => ({
+    id,
+    label: id === 'premium' ? 'Premium' : 'Gratis',
+    dailyPromptLimit: id === 'premium' ? 50 : 5,
+  }),
+  dailyLimitFor: (id: string) => (id === 'premium' ? 50 : 5),
+  isPremiumPlan: (id: string) => id === 'premium',
 }));
 
 vi.mock('@/lib/skills/registry', () => ({
@@ -106,6 +125,10 @@ async function readEvents(response: Response): Promise<Array<{ event: string; da
 describe('POST /api/chat (agent mode)', () => {
   beforeEach(() => {
     scriptedAnswers.length = 0;
+    quotaState.plan = 'free';
+    quotaState.allowed = true;
+    quotaState.remaining = 4;
+    quotaState.limit = 5;
   });
 
   it('rejects an unauthenticated request', async () => {
@@ -175,6 +198,77 @@ describe('POST /api/chat (agent mode)', () => {
 
     const done = events.find((e) => e.event === 'done')!;
     expect(done.data.activatedSkills).toEqual([{ slug: 'code-review', name: 'Code Review' }]);
+  });
+
+  it('enforces the free plan quota of five prompts per day', async () => {
+    quotaState.plan = 'free';
+    quotaState.limit = 5;
+    quotaState.allowed = false;
+    quotaState.remaining = 0;
+
+    const res = await POST(
+      buildRequest({
+        messages: [{ role: 'user', content: 'halo' }],
+        model: 'test-model',
+        mode: 'chat',
+      })
+    );
+
+    expect(res.status).toBe(429);
+    expect(res.headers.get('X-RateLimit-Limit')).toBe('5');
+    expect(res.headers.get('X-Plan')).toBe('free');
+
+    const data = await res.json();
+    expect(data.code).toBe('PLAN_LIMIT_REACHED');
+    expect(data.plan).toBe('free');
+    expect(data.limit).toBe(5);
+    expect(data.remaining).toBe(0);
+    expect(data.upgradeAvailable).toBe(true);
+    expect(data.error).toContain('5 prompt');
+    expect(data.error).toContain('Premium');
+  });
+
+  it('enforces the ten times bigger premium quota', async () => {
+    quotaState.plan = 'premium';
+    quotaState.limit = 50;
+    quotaState.allowed = false;
+    quotaState.remaining = 0;
+
+    const res = await POST(
+      buildRequest({
+        messages: [{ role: 'user', content: 'halo' }],
+        model: 'test-model',
+        mode: 'chat',
+      })
+    );
+
+    expect(res.status).toBe(429);
+    expect(res.headers.get('X-RateLimit-Limit')).toBe('50');
+    expect(res.headers.get('X-Plan')).toBe('premium');
+
+    const data = await res.json();
+    expect(data.code).toBe('PLAN_LIMIT_REACHED');
+    expect(data.plan).toBe('premium');
+    expect(data.limit).toBe(50);
+    // A premium account cannot upgrade any further.
+    expect(data.upgradeAvailable).toBe(false);
+  });
+
+  it('reports the plan and the remaining quota in the response headers', async () => {
+    scriptedAnswers.push('Halo!');
+
+    const res = await POST(
+      buildRequest({
+        messages: [{ role: 'user', content: 'halo' }],
+        model: 'test-model',
+        mode: 'chat',
+      })
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get('X-Plan')).toBe('free');
+    expect(res.headers.get('X-RateLimit-Limit')).toBe('5');
+    expect(res.headers.get('X-RateLimit-Remaining')).toBe('4');
   });
 
   it('keeps the plain chat mode working', async () => {

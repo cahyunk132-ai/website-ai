@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { registerUser, buildSessionCookieHeader } from '@/lib/auth';
+import { ensureSeededPlan, isPremiumPlan } from '@/lib/plans';
 
 export async function POST(req: Request) {
   try {
@@ -14,10 +15,11 @@ export async function POST(req: Request) {
     }
 
     const { user, token } = await registerUser(email, password, name);
+    const plan = await ensureSeededPlan(user.id, user.email);
 
     const response = NextResponse.json({
       success: true,
-      user,
+      user: { ...user, plan, premium: isPremiumPlan(plan) },
       token,
       message: 'Registrasi berhasil. Selamat datang di Hyunk AI Hub!',
     });

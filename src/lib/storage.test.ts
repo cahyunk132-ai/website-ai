@@ -247,7 +247,7 @@ describe('Storage layer (Supabase backed)', () => {
       rpc: () => ({ data: DAILY_REQUEST_LIMIT + 1, error: null }),
     });
 
-    const usage = await checkAndIncrementUsage('user-1');
+    const usage = await checkAndIncrementUsage('user-1', DAILY_REQUEST_LIMIT);
 
     expect(usage.allowed).toBe(false);
     expect(usage.remaining).toBe(0);
@@ -259,7 +259,7 @@ describe('Storage layer (Supabase backed)', () => {
       rpc: () => ({ data: 3, error: null }),
     });
 
-    const usage = await checkAndIncrementUsage('user-1');
+    const usage = await checkAndIncrementUsage('user-1', DAILY_REQUEST_LIMIT);
 
     expect(usage.allowed).toBe(true);
     expect(usage.remaining).toBe(DAILY_REQUEST_LIMIT - 3);
@@ -295,13 +295,26 @@ describe('Storage layer (Supabase backed)', () => {
       return originalFrom(table);
     };
 
-    const usage = await checkAndIncrementUsage('user-1');
+    const usage = await checkAndIncrementUsage('user-1', DAILY_REQUEST_LIMIT);
 
     expect(usage.allowed).toBe(true);
     expect(usage.requestCount).toBe(6);
     expect(upserts).toHaveLength(1);
     expect(upserts[0].row.request_count).toBe(6);
     expect(upserts[0].options.onConflict).toBe('user_id,date');
+  });
+
+  it('uses the quota of the subscription plan when no limit is given', async () => {
+    mockState.client = createFakeClient({
+      rpc: () => ({ data: 3, error: null }),
+    });
+
+    // Without an explicit limit the plan of the account decides: a free
+    // account may send 5 prompts per day.
+    const usage = await checkAndIncrementUsage('user-1');
+
+    expect(usage.limit).toBe(5);
+    expect(usage.remaining).toBe(2);
   });
 
   it('searches conversations and messages in the database', async () => {

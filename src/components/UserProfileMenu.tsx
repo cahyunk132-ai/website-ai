@@ -9,11 +9,18 @@ import {
   Sparkles,
   KeyRound,
   CheckCircle2,
+  Crown,
 } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
 
-export const UserProfileMenu: React.FC = () => {
+interface UserProfileMenuProps {
+  /** Opens the premium panel (plan, quota and upgrade). */
+  onOpenPremium?: () => void;
+}
+
+export const UserProfileMenu: React.FC<UserProfileMenuProps> = ({ onOpenPremium }) => {
   const { user, logout, openAuthModal } = useAuth();
+  const isPremium = user?.plan === 'premium';
   const [isOpen, setIsOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -64,6 +71,12 @@ export const UserProfileMenu: React.FC = () => {
                   PRO
                 </span>
               )}
+              {isPremium && (
+                <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/40 font-mono flex items-center gap-0.5">
+                  <Crown className="w-2.5 h-2.5" />
+                  PREMIUM
+                </span>
+              )}
             </div>
             <p className="text-[11px] text-slate-400 truncate">{user.email}</p>
           </div>
@@ -94,6 +107,24 @@ export const UserProfileMenu: React.FC = () => {
               </span>
             </div>
           </div>
+
+          {/* Premium / Plan */}
+          {onOpenPremium && (
+            <button
+              onClick={() => {
+                setIsOpen(false);
+                onOpenPremium();
+              }}
+              className={`flex items-center gap-2 w-full px-3 py-2 rounded-xl transition text-xs ${
+                isPremium
+                  ? 'text-amber-300 hover:text-amber-200 hover:bg-amber-950/40'
+                  : 'text-slate-300 hover:text-white hover:bg-slate-800'
+              }`}
+            >
+              <Crown className={`w-3.5 h-3.5 ${isPremium ? 'text-amber-400' : 'text-slate-400'}`} />
+              <span>{isPremium ? 'Paket Premium' : 'Upgrade ke Premium'}</span>
+            </button>
+          )}
 
           {/* Switch Account */}
           <button

@@ -44,6 +44,7 @@ import {
   Tag,
   Plus,
   Search,
+  Crown,
   BarChart3,
   Sun,
   Moon,
@@ -69,6 +70,8 @@ import { SchedulesPanel } from '@/components/SchedulesPanel';
 import { ShareModal } from '@/components/ShareModal';
 import { TrashModal } from '@/components/TrashModal';
 import { ContextMeter } from '@/components/ContextMeter';
+import { PremiumPanel } from '@/components/PremiumPanel';
+import { QuotaMeter } from '@/components/QuotaMeter';
 import { ChatMessage, ModelCapability, ProviderId, FileAttachment } from '@/lib/ai/types';
 import { ConversationSummary, FolderItem } from '@/lib/storage';
 import { AgentStepView, AgentSkillView } from '@/lib/ai/agentEvents';
@@ -131,6 +134,14 @@ export default function ChatPage() {
   const [isParametersOpen, setIsParametersOpen] = useState(false);
   const [isExportOpen, setIsExportOpen] = useState(false);
   const [isShortcutsOpen, setIsShortcutsOpen] = useState(false);
+  const [isPremiumOpen, setIsPremiumOpen] = useState(false);
+  const [quota, setQuota] = useState({
+    plan: 'free' as 'free' | 'premium',
+    used: 0,
+    limit: 5,
+    remaining: 5,
+    premium: false,
+  });
   const [isConvSettingsOpen, setIsConvSettingsOpen] = useState(false);
   const [convToEdit, setConvToEdit] = useState<ConversationSummary | null>(null);
   const [lightboxImage, setLightboxImage] = useState<string | null>(null);
@@ -278,6 +289,35 @@ export default function ChatPage() {
       }
     }
   }, []);
+
+  /**
+   * Reads the plan and the quota of the current user from the server.
+   */
+  const refreshQuota = useCallback(async () => {
+    if (!user) {
+      setQuota({ plan: 'free', used: 0, limit: 5, remaining: 5, premium: false });
+      return;
+    }
+    try {
+      const res = await fetch('/api/premium', { cache: 'no-store' });
+      if (!res.ok) return;
+      const data = await res.json();
+      setQuota({
+        plan: data.plan === 'premium' ? 'premium' : 'free',
+        used: data.used ?? 0,
+        limit: data.limit ?? 5,
+        remaining: data.remaining ?? 0,
+        premium: !!data.premium,
+      });
+    } catch {
+      // The meter keeps its last known state when the server is unreachable.
+    }
+  }, [user]);
+
+  // The quota is reloaded whenever the account changes.
+  useEffect(() => {
+    refreshQuota();
+  }, [refreshQuota]);
 
   const toggleTheme = () => {
     const nextTheme = theme === 'dark' ? 'light' : 'dark';
@@ -945,8 +985,38 @@ export default function ChatPage() {
       });
 
       if (!response.ok) {
-        const errorJson = await response.json();
+        const errorJson = await response.json().catch(() => ({}));
+
+        // The daily quota of the plan is exhausted: the premium panel is
+        // opened right away so the user can upgrade without hunting.
+        if (response.status === 429 && errorJson.code === 'PLAN_LIMIT_REACHED') {
+          setErrorMessage(errorJson.error || 'Kuota prompt harian sudah habis.');
+          setIsPremiumOpen(true);
+          refreshQuota();
+          throw new Error(errorJson.error || 'Kuota prompt harian sudah habis.');
+        }
+
         throw new Error(errorJson.error || `HTTP ${response.status}`);
+      }
+
+      // The server reports the remaining quota of the plan in the headers,
+      // so the meter stays in sync without an extra request.
+      const limitHeader = response.headers.get('X-RateLimit-Limit');
+      const remainingHeader = response.headers.get('X-RateLimit-Remaining');
+      const planHeader = response.headers.get('X-Plan');
+      if (limitHeader && remainingHeader) {
+        const limit = Number(limitHeader);
+        const remaining = Number(remainingHeader);
+        if (Number.isFinite(limit) && Number.isFinite(remaining)) {
+          setQuota((prev) => ({
+            ...prev,
+            limit,
+            remaining,
+            used: Math.max(0, limit - remaining),
+            plan: planHeader === 'premium' ? 'premium' : prev.plan,
+            premium: planHeader ? planHeader === 'premium' : prev.premium,
+          }));
+        }
       }
 
       if (!response.body) {
@@ -1265,6 +1335,14 @@ export default function ChatPage() {
         },
       },
       {
+        id: 'open-premium',
+        label: 'Buka Hyunk Premium',
+        hint: 'Lihat kuota harian dan upgrade paket',
+        group: 'Navigasi',
+        icon: Crown,
+        run: () => setIsPremiumOpen(true),
+      },
+      {
         id: 'open-memory',
         label: 'Buka AI Memory',
         hint: 'Facta yang diingat AI antar percakapan',
@@ -1423,6 +1501,7 @@ export default function ChatPage() {
         onOpenMemory={() => setIsMemoryOpen(true)}
         onOpenSchedules={() => setIsScheduleOpen(true)}
         onOpenExport={() => setIsExportOpen(true)}
+        onOpenPremium={() => setIsPremiumOpen(true)}
         isOpen={isSidebarOpen}
         onToggleOpen={() => setIsSidebarOpen(!isSidebarOpen)}
         theme={theme}
@@ -1637,6 +1716,9 @@ export default function ChatPage() {
                 <div className="w-5 h-5 rounded-md bg-gradient-to-tr from-cyan-600 to-blue-600 flex items-center justify-center text-white font-bold text-[10px] shadow-sm">
                   {(user.name || user.email).charAt(0).toUpperCase()}
                 </div>
+                {quota.premium && (
+                  <Crown className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                )}
                 <span className="hidden sm:inline font-medium max-w-[80px] truncate">{user.name}</span>
               </button>
             ) : (
@@ -2028,15 +2110,24 @@ export default function ChatPage() {
                 )}
               </div>
 
-              <div className="hidden sm:flex items-center gap-3">
-                <ContextMeter
-                  used={contextUsage.used}
-                  window={contextUsage.window}
-                  percent={contextUsage.percent}
-                  warning={contextUsage.warning}
-                  overflow={contextUsage.overflow}
+              <div className="flex items-center gap-2 sm:gap-3">
+                <QuotaMeter
+                  used={quota.used}
+                  limit={quota.limit}
+                  remaining={quota.remaining}
+                  premium={quota.premium}
+                  onClick={() => setIsPremiumOpen(true)}
                 />
-                <span className="text-[11px] text-slate-500">Shift + Enter for newline</span>
+                <div className="hidden sm:flex items-center gap-3">
+                  <ContextMeter
+                    used={contextUsage.used}
+                    window={contextUsage.window}
+                    percent={contextUsage.percent}
+                    warning={contextUsage.warning}
+                    overflow={contextUsage.overflow}
+                  />
+                  <span className="text-[11px] text-slate-500">Shift + Enter for newline</span>
+                </div>
               </div>
             </div>
 
@@ -2173,6 +2264,19 @@ export default function ChatPage() {
       <KeyboardShortcutsModal
         isOpen={isShortcutsOpen}
         onClose={() => setIsShortcutsOpen(false)}
+      />
+      <PremiumPanel
+        isOpen={isPremiumOpen}
+        onClose={() => setIsPremiumOpen(false)}
+        plan={quota.plan}
+        used={quota.used}
+        limit={quota.limit}
+        remaining={quota.remaining}
+        isAdmin={user?.role === 'admin'}
+        onPlanChanged={(nextPlan) => {
+          setQuota((prev) => ({ ...prev, plan: nextPlan, premium: nextPlan === 'premium' }));
+          refreshQuota();
+        }}
       />
       <ConversationSettingsModal
         isOpen={isConvSettingsOpen}
