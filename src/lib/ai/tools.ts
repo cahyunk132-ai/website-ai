@@ -8,6 +8,18 @@
 
 import vm from 'vm';
 import { AgentToolCall, AgentToolDescriptor } from './agentProtocol';
+import { scanWebsiteSecurity, resolveHost, SecurityReport } from './tools/security';
+import { inspectPage, PageInspection } from './tools/inspector';
+import {
+  calculateHash,
+  base64Codec,
+  selectJsonPath,
+  extractWithRegex,
+  convertUnit,
+  analyzePassword,
+  nextCronRuns,
+  diffText,
+} from './tools/utility';
 
 export interface ToolExecutionResult {
   tool: string;
@@ -65,6 +77,74 @@ export const AGENT_TOOLS: AgentToolDescriptor[] = [
     description:
       'Get the current date and time, optionally in a specific IANA time zone. Use it whenever the exact current moment matters.',
     parameters: 'optional time zone, for example Asia/Makassar (defaults to UTC)',
+  },
+  {
+    name: 'website_security_scan',
+    description:
+      'Run a deep, non-destructive security assessment of a website: TLS protocol and certificate expiry, redirect chain, security headers (HSTS, CSP, X-Frame-Options...), cookie flags, CORS, mixed content, information disclosure and sensitive files that are publicly reachable. Returns a score with graded findings and the raw evidence. Use it when the user asks whether a site is secure, asks for a security review, a penetration test summary, an SSL check or a hardening checklist. Only scan sites the user owns or is authorised to test.',
+    parameters:
+      'JSON object: {"url":"https://example.com","deep":true} - "deep" also reads security.txt, robots.txt and sitemap.xml',
+  },
+  {
+    name: 'dns_lookup',
+    description:
+      'Resolve the DNS records of a host: A, AAAA, MX, TXT, NS and CNAME, plus the presence of the SPF and DMARC records. Use it for email deliverability problems, domain verification and to check where a domain points to.',
+    parameters: 'JSON object: {"host":"example.com","type":"A"} - type is one of A, AAAA, MX, TXT, NS, CNAME, ALL (default ALL)',
+  },
+  {
+    name: 'page_inspector',
+    description:
+      'Inspect a page and return its metadata and content signals: title, meta description, canonical, robots, Open Graph and Twitter cards, language, heading structure, images without alt text, internal and external links, word count, response time and the SEO/accessibility issues that were detected.',
+    parameters: 'the absolute http(s) URL',
+  },
+  {
+    name: 'hash_calculate',
+    description:
+      'Calculate a cryptographic digest of a text: sha256, sha1, sha512 or md5, optionally as a keyed HMAC. Use it to verify a file, to fingerprint an API key without revealing it, or to check an integrity hash.',
+    parameters:
+      'JSON object: {"text":"...","algorithm":"sha256","key":"optional hmac key"}',
+  },
+  {
+    name: 'base64_codec',
+    description:
+      'Encode or decode a base64 string. Useful to inspect an encoded token or to prepare a payload for an API that expects base64.',
+    parameters: 'JSON object: {"text":"...","mode":"encode"} - mode is encode or decode',
+  },
+  {
+    name: 'json_select',
+    description:
+      'Extract values from a JSON document with a path, for example "data.items[0].id" or "results[*].email". Use it to pull a single value out of a large API response instead of reading the whole document.',
+    parameters: 'JSON object: {"json":"{...}","path":"data.items[*].id"}',
+  },
+  {
+    name: 'regex_extract',
+    description:
+      'Extract every match of a regular expression from a text, including the capture groups. Use it to pull IDs, emails, URLs, versions or any other pattern out of a document. The pattern is evaluated with a hard timeout so a catastrophic backtracking expression cannot block the server.',
+    parameters: 'JSON object: {"text":"...","pattern":"[a-z]+@[a-z]+\\\\.[a-z]+","flags":"g"}',
+  },
+  {
+    name: 'unit_convert',
+    description:
+      'Convert a value between two units of the same family: length, mass, data or time. Use it whenever the user mixes metric and imperial units.',
+    parameters: 'JSON object: {"value":10,"from":"km","to":"mi"}',
+  },
+  {
+    name: 'password_entropy',
+    description:
+      'Estimate the strength of a password locally: length, character pool, entropy in bits, a strength rating, the estimated time to crack it and the concrete suggestions to improve it. The password is analysed on the server and is never sent anywhere else.',
+    parameters: 'the password to analyse',
+  },
+  {
+    name: 'cron_next',
+    description:
+      'Compute the next execution times of a 5 field cron expression. Use it to explain a schedule, to verify a crontab line or to answer when a job will run next.',
+    parameters: 'JSON object: {"expression":"0 9 * * 1-5","count":5}',
+  },
+  {
+    name: 'text_diff',
+    description:
+      'Compare two texts and return a line based diff with the added and the removed lines. Use it to review a change, to compare two configuration files or to summarise what an edit does.',
+    parameters: 'JSON object: {"original":"...","updated":"..."}',
   },
 ];
 
@@ -881,6 +961,236 @@ export async function runAgentTool(
 /**
  * Executes a tool call parsed from the agent protocol.
  */
+/**
+ * Formats a security report for the model: the structured summary first, then
+ * the raw evidence.
+ */
+function formatSecurityReport(report: SecurityReport): string {
+  const lines: string[] = [];
+
+  lines.push(`SECURITY SCAN: ${report.finalUrl}`);
+  lines.push(`Score: ${report.score}/100 (grade ${report.grade})`);
+  lines.push(report.summary);
+  lines.push('');
+
+  if (report.findings.length) {
+    lines.push('FINDINGS');
+    report.findings.forEach((finding, index) => {
+      lines.push(`${index + 1}. [${finding.severity}] ${finding.title}`);
+      lines.push(`   ${finding.detail}`);
+      if (finding.evidence) lines.push(`   Evidence: ${finding.evidence}`);
+      if (finding.recommendation) lines.push(`   Fix: ${finding.recommendation}`);
+    });
+  } else {
+    lines.push('FINDINGS: none.');
+  }
+
+  lines.push('');
+  lines.push('RAW DATA');
+  lines.push(JSON.stringify(report.raw, null, 2));
+
+  return lines.join('\n');
+}
+
+/**
+ * Formats a page inspection for the model.
+ */
+function formatPageInspection(report: PageInspection): string {
+  const lines: string[] = [];
+
+  lines.push(`PAGE INSPECTION: ${report.finalUrl}`);
+  lines.push(
+    `Status: ${report.status} ${report.statusText} | ${report.responseTimeMs}ms | ${report.contentType} | compressed: ${report.compressed}`
+  );
+  lines.push(`Title: ${report.meta.title || '(none)'}`);
+  lines.push(`Description: ${report.meta.description || '(none)'}`);
+  lines.push(`Canonical: ${report.meta.canonical || '(none)'}`);
+  lines.push(`Language: ${report.meta.lang || '(none)'} | Viewport: ${report.meta.viewport || '(none)'}`);
+  lines.push(
+    `Open Graph: title=${report.meta.ogTitle || '(none)'} description=${report.meta.ogDescription || '(none)'} image=${report.meta.ogImage || '(none)'}`
+  );
+  lines.push(`Twitter card: ${report.meta.twitterCard || '(none)'}`);
+  lines.push(
+    `Headings: h1=${report.headings.counts.h1 || 0} h2=${report.headings.counts.h2 || 0} h3=${report.headings.counts.h3 || 0}`
+  );
+  if (report.headings.h1.length) {
+    lines.push(`H1 titles: ${report.headings.h1.join(' | ')}`);
+  }
+  lines.push(
+    `Images: ${report.images.total} total, ${report.images.withoutAlt} without alt, ${report.images.lazy} lazy`
+  );
+  lines.push(
+    `Links: ${report.links.total} total, ${report.links.internal} internal, ${report.links.external} external, ${report.links.nofollow} nofollow, ${report.links.withoutText} without anchor text`
+  );
+  lines.push(
+    `Content: ${report.words} words, ${report.scripts} scripts, ${report.stylesheets} stylesheets, ${report.forms} forms`
+  );
+
+  if (report.issues.length) {
+    lines.push('');
+    lines.push('ISSUES');
+    report.issues.forEach((issue, index) => {
+      lines.push(`${index + 1}. [${issue.severity}] ${issue.message}`);
+    });
+  }
+
+  return lines.join('\n');
+}
+
+/**
+ * Executes one of the new dedicated tools. Returns null when the name is not
+ * one of them, so the caller can fall back to the legacy matcher.
+ */
+async function executeNamedTool(
+  name: string,
+  args: Record<string, any>,
+  call: AgentToolCall
+): Promise<{ output: string; data?: any } | null> {
+  const input = typeof args.input === 'string' && args.input ? args.input : call.payload;
+
+  switch (name) {
+    case 'website_security_scan': {
+      const url = (typeof args.url === 'string' && args.url) || input;
+      if (!url) throw new Error('A URL is required to scan a website.');
+      const report = await scanWebsiteSecurity(url, assertSafeUrl, {
+        deep: args.deep === true || args.deep === 'true',
+      });
+      return { output: formatSecurityReport(report), data: report };
+    }
+
+    case 'dns_lookup': {
+      const host =
+        (typeof args.host === 'string' && args.host) ||
+        (typeof args.hostname === 'string' && args.hostname) ||
+        (typeof args.domain === 'string' && args.domain) ||
+        input;
+      if (!host) throw new Error('A hostname is required, for example example.com.');
+      const cleanHost = host.replace(/^https?:\/\//i, '').split('/')[0];
+      const info = await resolveHost(cleanHost);
+      return {
+        output: `DNS RECORDS FOR ${cleanHost}\n${JSON.stringify(info, null, 2)}`,
+        data: info,
+      };
+    }
+
+    case 'page_inspector': {
+      const url = (typeof args.url === 'string' && args.url) || input;
+      if (!url) throw new Error('A URL is required to inspect a page.');
+      const report = await inspectPage(url, assertSafeUrl);
+      return { output: formatPageInspection(report), data: report };
+    }
+
+    case 'hash_calculate': {
+      const text = typeof args.text === 'string' ? args.text : input;
+      const result = calculateHash(
+        text,
+        typeof args.algorithm === 'string' ? args.algorithm : 'sha256',
+        typeof args.key === 'string' && args.key ? args.key : undefined
+      );
+      return {
+        output: `${result.algorithm}: ${result.digest}\nbase64: ${result.base64}\nlength: ${result.length} bytes`,
+        data: result,
+      };
+    }
+
+    case 'base64_codec': {
+      const text = typeof args.text === 'string' ? args.text : input;
+      const mode = args.mode === 'decode' ? 'decode' : 'encode';
+      const result = base64Codec(text, mode);
+      return { output: result.result, data: result };
+    }
+
+    case 'json_select': {
+      const raw = typeof args.json === 'string' ? args.json : input;
+      let document: unknown;
+      try {
+        document = JSON.parse(raw);
+      } catch {
+        throw new Error('The "json" argument is not valid JSON.');
+      }
+      const path = typeof args.path === 'string' ? args.path : '';
+      const values = selectJsonPath(document, path);
+      return {
+        output: values.length
+          ? `MATCHES (${values.length}):\n${values
+              .map((value) => (typeof value === 'object' ? JSON.stringify(value) : String(value)))
+              .join('\n')}`
+          : 'No value matched the path.',
+        data: values,
+      };
+    }
+
+    case 'regex_extract': {
+      const text = typeof args.text === 'string' ? args.text : input;
+      const pattern = typeof args.pattern === 'string' ? args.pattern : '';
+      const flags = typeof args.flags === 'string' ? args.flags : 'g';
+      const result = extractWithRegex(text, pattern, flags);
+      return {
+        output: result.count
+          ? `MATCHES (${result.count}${result.truncated ? ', truncated' : ''}):\n${result.matches
+              .map((m) => `${m.match}${m.groups.length ? ` | groups: ${m.groups.join(', ')}` : ''}`)
+              .join('\n')}`
+          : 'The pattern did not match anything.',
+        data: result,
+      };
+    }
+
+    case 'unit_convert': {
+      const value = Number(args.value);
+      const result = convertUnit(
+        value,
+        typeof args.from === 'string' ? args.from : '',
+        typeof args.to === 'string' ? args.to : '',
+        typeof args.category === 'string' ? args.category : undefined
+      );
+      return { output: result.result, data: result };
+    }
+
+    case 'password_entropy': {
+      const password = typeof args.password === 'string' ? args.password : input;
+      const analysis = analyzePassword(password);
+      return {
+        output: [
+          `Length: ${analysis.length}`,
+          `Entropy: ${analysis.entropyBits} bits`,
+          `Character pool: ${analysis.charsetSize} (${analysis.pool.join(', ') || 'none'})`,
+          `Strength: ${analysis.strength}`,
+          `Estimated crack time: ${analysis.estimatedCrackTime}`,
+          `Common password: ${analysis.isCommonPassword ? 'yes' : 'no'}`,
+          `Suggestions: ${analysis.suggestions.join(' ')}`,
+        ].join('\n'),
+        data: analysis,
+      };
+    }
+
+    case 'cron_next': {
+      const expression = typeof args.expression === 'string' ? args.expression : input;
+      const count = Math.min(20, Math.max(1, Number(args.count) || 5));
+      const runs = nextCronRuns(expression, count);
+      return { output: `NEXT RUNS:\n${runs.join('\n')}`, data: runs };
+    }
+
+    case 'text_diff': {
+      const original = typeof args.original === 'string' ? args.original : '';
+      const updated = typeof args.updated === 'string' ? args.updated : '';
+      const result = diffText(original, updated);
+      return {
+        output: result.changed
+          ? `+${result.added} / -${result.removed} lines\n${result.lines
+              .map((line) =>
+                line.type === 'added' ? `+ ${line.text}` : line.type === 'removed' ? `- ${line.text}` : `  ${line.text}`
+              )
+              .join('\n')}`
+          : 'The two texts are identical.',
+        data: result,
+      };
+    }
+
+    default:
+      return null;
+  }
+}
+
 export async function executeAgentToolCall(call: AgentToolCall): Promise<ToolExecutionResult> {
   const startTime = Date.now();
   const normalized = call.tool.toLowerCase().trim();
@@ -896,7 +1206,14 @@ export async function executeAgentToolCall(call: AgentToolCall): Promise<ToolExe
     let output = '';
     let data: any = undefined;
 
-    if (normalized.includes('search')) {
+    // The dedicated tools are matched by their exact name so that a name
+    // such as "hash_calculate" can never be mistaken for the calculator.
+    const named = await executeNamedTool(normalized, args, call);
+
+    if (named) {
+      output = named.output;
+      data = named.data;
+    } else if (normalized.includes('search')) {
       const searchRes = await executeWebSearch(
         typeof args.query === 'string' ? args.query : input
       );

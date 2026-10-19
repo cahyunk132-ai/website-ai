@@ -59,6 +59,12 @@
 - **Agent Skills (Progressive Disclosure)**: A skill library stored in Supabase. The model only receives the *name + description* of every skill; the full body is loaded on demand the moment the agent decides to use it (`<skill_use skill="..."/>`). Users can browse, pin and author their own skills from the **Skills** panel.
 - **Preset Personas**: A pinned skill becomes a manual persona that is injected into every request (agent *and* standard chat mode).
 - **Autonomous Agent Loop**: In agent mode the model can call tools (`web_search`, `fetch_url`, `http_request`, `code_interpreter`, `calculator`, `datetime`) and load skills. Every result is fed back to the model, which continues with the next step until it produces the final answer. The UI shows the whole **Agent Execution Timeline**.
+- **Security & Developer Tool Suite** (11 new tools, usable in agent mode *and* from the **Tools** panel):
+  - `website_security_scan` — non destructive security assessment of a website: TLS protocol/cipher and certificate expiry, HSTS/CSP/X-Frame-Options/X-Content-Type-Options/Referrer-Policy/Permissions-Policy/COOP, cookie `Secure`/`HttpOnly`/`SameSite` flags, CORS misconfiguration (wildcard + credentials), mixed content, version disclosure, secrets leaked in the page source and sensitive files that are publicly reachable (`.env`, `.git/HEAD`, `Dockerfile`, SQL dumps, backups…). The result is a **score (0-100) with a grade A-F**, a list of findings per severity with the evidence and the recommendation, plus the raw data. Every request goes through the SSRF guard, only `GET`/`HEAD` is used, the body is capped and the scan is rate limited.
+  - `dns_lookup` — A, AAAA, MX, TXT, NS and CNAME records plus the presence of the SPF and DMARC records.
+  - `page_inspector` — meta tags, Open Graph, Twitter card, heading structure, images without `alt`, links, word count and the SEO/accessibility issues of a page.
+  - `hash_calculate`, `base64_codec`, `json_select`, `regex_extract`, `unit_convert`, `password_entropy`, `cron_next`, `text_diff` — everyday developer utilities (SHA-256/SHA-512/HMAC, Base64, JSON path with wildcards, safe regex extraction with a ReDoS timeout, unit conversion, password strength and entropy, next cron runs, line diff).
+  - The tools are only meant for websites the user owns or is authorised to test. The security scan is an **assessment** tool: it never brute forces, never sends exploit payloads and never performs a denial of service.
 - **Android Ready Rendering**: The interface is tuned for Android phones and for the native Android build (`com.hyunk.aihub`, a WebView wrapper around this app):
   - The soft keyboard no longer covers the composer (`interactive-widget=resizes-content` plus a `visualViewport` listener that keeps the conversation pinned to the bottom).
   - Safe area insets are respected for the status bar, the gesture navigation bar and the notch in landscape.
@@ -194,6 +200,7 @@ website-ai/
 │   │   │   ├── settings/route.ts      # Encrypted credential management
 │   │   │   ├── folders/               # Persistent per-user folder endpoints
 │   │   │   ├── skills/                # Skill library endpoints (list/create/pin)
+│   │   │   ├── tools/run/route.ts     # Manual runner for the security & utility tools
 │   │   │   └── conversations/         # Conversation CRUD endpoints
 │   │   ├── globals.css                # Dark theme & styling
 │   │   ├── layout.tsx                 # Root layout & metadata
@@ -204,6 +211,7 @@ website-ai/
 │   │   ├── UsageDashboardModal.tsx    # Quota telemetry modal
 │   │   ├── SettingsModal.tsx          # API key encryption modal
 │   │   ├── SkillsModal.tsx            # Skill library: browse, pin, author
+│   │   ├── ToolsPanel.tsx             # Manual runner for the 11 new tools
 │   │   ├── AgentReasoningCard.tsx     # Reasoning, tool outputs & agent timeline
 │   │   └── ui/
 │   │       ├── CodeBlock.tsx          # Syntax highlighted code
@@ -220,6 +228,10 @@ website-ai/
 │       │   ├── agent.ts               # Autonomous multi-step agent loop
 │       │   ├── agentProtocol.ts       # Agent protocol parser & prompt builders
 │       │   ├── agentEvents.ts         # Shared agent view types
+│       │   ├── tools/
+│       │   │   ├── security.ts         # Website security assessment engine
+│       │   │   ├── inspector.ts        # Page metadata & content inspector
+│       │   │   └── utility.ts          # Hash, base64, JSON, regex, units, cron, diff
 │       │   └── providers/
 │       │       ├── radox.ts           # Radox AI adapter
 │       │       └── inkstone.ts        # Intern InkStone adapter
@@ -252,6 +264,7 @@ website-ai/
 - **Secure HTTP Headers**: Configured with strict `Content-Security-Policy`, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, and `Referrer-Policy`.
 - **Signed Sessions**: Session cookies are HMAC-SHA256 signed and verified in constant time; invalid or expired cookies are rejected by the Edge middleware and cleared.
 - **Per-User Quota**: A daily request budget (200 requests) is enforced per account through atomic database counters, so a single user cannot exhaust the shared provider quota.
+- **Safe Tool Execution**: Every tool that reaches the network goes through the SSRF guard (`assertSafeUrl`), which rejects loopback, private, link-local and cloud metadata addresses. The security scan re-validates the target on **every redirect hop**, only issues `GET`/`HEAD` requests, caps the response body (512 KB), applies a request timeout and a maximum number of requests per scan, and never executes an exploit payload.
 
 ---
 

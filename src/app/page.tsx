@@ -34,6 +34,7 @@ import {
   Edit3,
   Lock,
   BookOpen,
+  Terminal,
 } from 'lucide-react';
 import { Sidebar } from '@/components/Sidebar';
 import { ModelSelector } from '@/components/ModelSelector';
@@ -47,6 +48,7 @@ import { ExportModal } from '@/components/ExportModal';
 import { KeyboardShortcutsModal } from '@/components/KeyboardShortcutsModal';
 import { ConversationSettingsModal } from '@/components/ConversationSettingsModal';
 import { SkillsModal } from '@/components/SkillsModal';
+import { ToolsPanel } from '@/components/ToolsPanel';
 import { ChatMessage, ModelCapability, ProviderId, FileAttachment } from '@/lib/ai/types';
 import { ConversationSummary, FolderItem } from '@/lib/storage';
 import { AgentStepView, AgentSkillView } from '@/lib/ai/agentEvents';
@@ -82,6 +84,7 @@ export default function ChatPage() {
   const [agentSteps, setAgentSteps] = useState<AgentStepView[]>([]);
   const [activatedSkills, setActivatedSkills] = useState<AgentSkillView[]>([]);
   const [isSkillsOpen, setIsSkillsOpen] = useState(false);
+  const [isToolsOpen, setIsToolsOpen] = useState(false);
 
   // Theme & Navigation
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
@@ -119,6 +122,10 @@ export default function ChatPage() {
     }
     if (isSkillsOpen) {
       setIsSkillsOpen(false);
+      return;
+    }
+    if (isToolsOpen) {
+      setIsToolsOpen(false);
       return;
     }
     if (isParametersOpen) {
@@ -160,6 +167,7 @@ export default function ChatPage() {
   }, [
     lightboxImage,
     isSkillsOpen,
+    isToolsOpen,
     isParametersOpen,
     isConvSettingsOpen,
     isExportOpen,
@@ -175,6 +183,7 @@ export default function ChatPage() {
   const isOverlayOpen =
     !!lightboxImage ||
     isSkillsOpen ||
+    isToolsOpen ||
     isParametersOpen ||
     isConvSettingsOpen ||
     isExportOpen ||
@@ -1057,6 +1066,20 @@ export default function ChatPage() {
               )}
             </button>
 
+            {/* Tools Button */}
+            <button
+              onClick={() => setIsToolsOpen(true)}
+              className={`p-2 sm:px-2.5 sm:py-1.5 rounded-xl border text-xs transition flex items-center gap-1.5 ${
+                theme === 'dark'
+                  ? 'bg-slate-900 hover:bg-slate-800 border-slate-800 text-slate-300'
+                  : 'bg-white hover:bg-slate-100 border-slate-300 text-slate-700'
+              }`}
+              title="Tool Runner - jalankan tool langsung"
+            >
+              <Terminal className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+              <span className="hidden md:inline font-medium">Tools</span>
+            </button>
+
             {/* Export Button */}
             <button
               onClick={() => setIsExportOpen(true)}
@@ -1634,6 +1657,7 @@ export default function ChatPage() {
         onTogglePin={handleToggleSkillPin}
         onChanged={fetchPinnedSkills}
       />
+      <ToolsPanel isOpen={isToolsOpen} onClose={() => setIsToolsOpen(false)} />
       <DownloadAppModal
         isOpen={isDownloadOpen}
         onClose={() => setIsDownloadOpen(false)}
