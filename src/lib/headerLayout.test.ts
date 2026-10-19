@@ -31,6 +31,10 @@ const headerMarkup = page.slice(page.indexOf('<header'), page.indexOf('</header>
  *  3. "tombol morenya merepotkan" - the "More" dropdown hid the actions
  *     behind an extra click, so the buttons are back in the toolbar, this
  *     time as compact icon buttons that can never overlap.
+ *  4. "tombolnya aneh" - the toolbar mixed three labelled buttons with seven
+ *     icon-only ones, which looked random and cryptic. Every action now has
+ *     a visible label and the actions live in their own wrapping row, so
+ *     they can neither overlap the main bar nor each other.
  */
 describe('header toolbar layout', () => {
   it('keeps every action directly in the toolbar', () => {
@@ -53,9 +57,14 @@ describe('header toolbar layout', () => {
       'Manage API Key Pool',
     ];
 
+    // The tooltips now live in the shared action list and are handed to the
+    // button as `title={action.title}`.
+    const start = page.indexOf('const headerActions = [');
+    const block = page.slice(start, page.indexOf('\n  ];', start));
     for (const title of actions) {
-      expect(headerMarkup).toContain(`title="${title}"`);
+      expect(block).toContain(`title: '${title}'`);
     }
+    expect(headerMarkup).toContain('title={action.title}');
   });
 
   it('keeps the secondary actions in the command palette as well', () => {
@@ -64,14 +73,50 @@ describe('header toolbar layout', () => {
     }
   });
 
-  it('uses compact icon buttons so the row can never overlap', () => {
-    // The shared class of the toolbar buttons: no label, only the tooltip.
-    expect(page).toMatch(/const toolbarButtonClass = `p-2 rounded-xl border/);
-    // Only the three most used buttons still carry a text label.
-    const labels = ['Skills', 'Tools', 'Palette'].filter((label) =>
-      headerMarkup.includes(`>${label}</span>`)
+  it('labels every toolbar action instead of leaving cryptic icons', () => {
+    // The action list is rendered from one array, so icon and label always
+    // travel together - no more "icon only" buttons in the middle of the bar.
+    const start = page.indexOf('const headerActions = [');
+    expect(start).toBeGreaterThan(-1);
+    const block = page.slice(start, page.indexOf('\n  ];', start));
+
+    const labels = [...block.matchAll(/label: '([^']+)'/g)].map((m) => m[1]);
+    expect(labels).toEqual([
+      'Skills',
+      'Tools',
+      'Palette',
+      'Memory',
+      'Jadwal',
+      'Share',
+      'Sampah',
+      'Export',
+      'Download',
+      'Key Pool',
+    ]);
+
+    // Every action also has an icon and a tooltip for the narrow screens.
+    const icons = [...block.matchAll(/\n      icon: /g)].length;
+    const titles = [...block.matchAll(/\n      title: /g)].length;
+    expect(icons).toBe(labels.length);
+    expect(titles).toBe(labels.length);
+
+    // The label is rendered next to the icon.
+    expect(headerMarkup).toMatch(
+      /<span className="hidden sm:inline font-medium">\{action\.label\}<\/span>/
     );
-    expect(labels).toEqual(['Skills', 'Tools', 'Palette']);
+    expect(page).toMatch(
+      /const toolbarButtonClass = `px-2\.5 py-1\.5 rounded-xl border[^`]*flex items-center gap-1\.5/
+    );
+  });
+
+  it('keeps the actions in their own wrapping row', () => {
+    // The header itself wraps, the main bar may shrink, and the action row
+    // takes a full line of its own -> nothing can overlap anything.
+    expect(headerMarkup).toMatch(/flex flex-wrap items-center/);
+    expect(headerMarkup).toMatch(/flex items-center gap-1\.5 sm:gap-2\.5 min-w-0/);
+    expect(headerMarkup).toMatch(
+      /w-full flex items-center gap-1 sm:gap-1\.5 flex-wrap pt-1\.5 border-t/
+    );
   });
 
   it('lets the header scroll instead of overlapping the buttons', () => {
