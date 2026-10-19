@@ -558,8 +558,8 @@ export function nextCronRuns(expression: string, count = 5, from = new Date()): 
 
   const results: string[] = [];
   const cursor = new Date(from.getTime());
-  cursor.setSeconds(0, 0);
-  cursor.setMinutes(cursor.getMinutes() + 1);
+  cursor.setUTCSeconds(0, 0);
+  cursor.setUTCMinutes(cursor.getUTCMinutes() + 1);
 
   const limit = 1000 * 60 * 24 * 366 * 5; // five years of minutes
   let guard = 0;
@@ -568,15 +568,15 @@ export function nextCronRuns(expression: string, count = 5, from = new Date()): 
     guard += 1;
 
     if (
-      fields.minutes.has(cursor.getMinutes()) &&
-      fields.hours.has(cursor.getHours()) &&
-      fields.months.has(cursor.getMonth() + 1)
+      fields.minutes.has(cursor.getUTCMinutes()) &&
+      fields.hours.has(cursor.getUTCHours()) &&
+      fields.months.has(cursor.getUTCMonth() + 1)
     ) {
       const domRestricted = parts[2].trim() !== '*';
       const dowRestricted = parts[4].trim() !== '*';
 
-      const domMatch = fields.daysOfMonth.has(cursor.getDate());
-      const dowMatch = fields.daysOfWeek.has(cursor.getDay());
+      const domMatch = fields.daysOfMonth.has(cursor.getUTCDate());
+      const dowMatch = fields.daysOfWeek.has(cursor.getUTCDay());
 
       // When both day fields are restricted, cron uses an OR.
       const dayMatches =
@@ -587,7 +587,7 @@ export function nextCronRuns(expression: string, count = 5, from = new Date()): 
       }
     }
 
-    cursor.setMinutes(cursor.getMinutes() + 1);
+    cursor.setUTCMinutes(cursor.getUTCMinutes() + 1);
   }
 
   if (!results.length) {
