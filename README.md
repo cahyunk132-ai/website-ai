@@ -59,6 +59,16 @@
 - **Agent Skills (Progressive Disclosure)**: A skill library stored in Supabase. The model only receives the *name + description* of every skill; the full body is loaded on demand the moment the agent decides to use it (`<skill_use skill="..."/>`). Users can browse, pin and author their own skills from the **Skills** panel.
 - **Preset Personas**: A pinned skill becomes a manual persona that is injected into every request (agent *and* standard chat mode).
 - **Autonomous Agent Loop**: In agent mode the model can call tools (`web_search`, `fetch_url`, `http_request`, `code_interpreter`, `calculator`, `datetime`) and load skills. Every result is fed back to the model, which continues with the next step until it produces the final answer. The UI shows the whole **Agent Execution Timeline**.
+- **AI Memory (Cross Conversation Memory)**: the assistant remembers the facts you ask it to keep (your name, your stack, your preferred style). Memories are extracted automatically from explicit statements, can be added with `/remember <fact>` and removed with `/forget <fact>`, and are injected into the system prompt of every following conversation. A dedicated panel lists them, with an on/off switch per entry.
+- **Command Palette (Ctrl/Cmd + K)**: a searchable palette with the most common actions (new chat, switch to agent mode, open the tools, the skills, the memory, the schedules, the trash, share, export, theme, notifications) and a **Prompt Library** with eight built-in templates plus your own, saved directly from the composer.
+- **Scheduled Runs (cron)**: background prompts that run on their own schedule (`0 9 * * *`, `0 8 * * 1-5`, ...). Each run is stored as a new conversation, and the panel shows the next run, the last result and a **Run now** button. On a serverless platform the schedules are evaluated by the client while the app is open.
+- **Public Share Links**: turn a conversation into a read-only public page (`/share/<token>`) that anyone can read, with a revoke button. The share token is the only credential, so the reader does not need an account.
+- **Message Feedback**: a thumbs up / thumbs down on every answer, stored per message so the quality of the model can be tracked.
+- **Trash & Restore**: deleting a conversation moves it to the trash instead of removing it, and the **Sampah** panel restores it (or deletes it for good).
+- **Tags & Filter**: label conversations with any number of tags and filter the sidebar by them.
+- **Context Meter**: a live indicator of how much of the model context window the conversation already uses (the meter turns amber at 80% and red on an overflow).
+- **Completion Notifications**: the browser can announce a finished answer with a system notification, which is handy when a long response runs while you are in another tab.
+- **Usage Activity Chart**: the dashboard now shows the requests and the tokens of the last seven days as a bar chart, next to the aggregated counters.
 - **Security & Developer Tool Suite** (11 new tools, usable in agent mode *and* from the **Tools** panel):
   - `website_security_scan` — non destructive security assessment of a website: TLS protocol/cipher and certificate expiry, HSTS/CSP/X-Frame-Options/X-Content-Type-Options/Referrer-Policy/Permissions-Policy/COOP, cookie `Secure`/`HttpOnly`/`SameSite` flags, CORS misconfiguration (wildcard + credentials), mixed content, version disclosure, secrets leaked in the page source and sensitive files that are publicly reachable (`.env`, `.git/HEAD`, `Dockerfile`, SQL dumps, backups…). The result is a **score (0-100) with a grade A-F**, a list of findings per severity with the evidence and the recommendation, plus the raw data. Every request goes through the SSRF guard, only `GET`/`HEAD` is used, the body is capped and the scan is rate limited.
   - `dns_lookup` — A, AAAA, MX, TXT, NS and CNAME records plus the presence of the SPF and DMARC records.
@@ -144,6 +154,7 @@ Apply the migrations in your Supabase SQL editor (in chronological order):
 supabase/migrations/20261018000000_init_hyunk_ai_hub.sql   # base schema
 supabase/migrations/20261019000001_fix_and_features.sql    # folders, quota, multi-key pool
 supabase/migrations/20261020000000_agent_skills.sql        # skill library + 12 seeded skills
+supabase/migrations/20261021000000_features_memory_share_schedule.sql  # memory, prompts, shares, feedback, schedules, tags, trash
 ```
 Or via the Supabase CLI:
 ```bash
@@ -201,6 +212,14 @@ website-ai/
 │   │   │   ├── folders/               # Persistent per-user folder endpoints
 │   │   │   ├── skills/                # Skill library endpoints (list/create/pin)
 │   │   │   ├── tools/run/route.ts     # Manual runner for the security & utility tools
+│   │   │   ├── memories/route.ts      # AI memory (CRUD)
+│   │   │   ├── prompts/route.ts       # Prompt library (CRUD)
+│   │   │   ├── schedules/route.ts     # Scheduled runs (CRUD)
+│   │   │   ├── schedules/tick/route.ts # Executes the due schedules
+│   │   │   ├── share/route.ts         # Public share links (owner side)
+│   │   │   ├── share/[token]/route.ts # Public share reader (no login)
+│   │   │   ├── feedback/route.ts      # Thumbs up / down per message
+│   │   │   ├── usage/daily/route.ts   # Daily usage for the activity chart
 │   │   │   └── conversations/         # Conversation CRUD endpoints
 │   │   ├── globals.css                # Dark theme & styling
 │   │   ├── layout.tsx                 # Root layout & metadata
@@ -212,6 +231,13 @@ website-ai/
 │   │   ├── SettingsModal.tsx          # API key encryption modal
 │   │   ├── SkillsModal.tsx            # Skill library: browse, pin, author
 │   │   ├── ToolsPanel.tsx             # Manual runner for the 11 new tools
+│   │   ├── CommandPalette.tsx         # Ctrl/Cmd+K palette + prompt library
+│   │   ├── MemoryPanel.tsx            # AI memory management
+│   │   ├── SchedulesPanel.tsx         # Cron schedules
+│   │   ├── ShareModal.tsx             # Public share link
+│   │   ├── TrashModal.tsx             # Trash & restore
+│   │   ├── UsageChart.tsx             # 7 day activity chart
+│   │   ├── ContextMeter.tsx           # Context window indicator
 │   │   ├── AgentReasoningCard.tsx     # Reasoning, tool outputs & agent timeline
 │   │   └── ui/
 │   │       ├── CodeBlock.tsx          # Syntax highlighted code
@@ -242,13 +268,18 @@ website-ai/
 │       ├── auth.ts                    # Login/register, Supabase seeding, sessions
 │       ├── sessionToken.ts            # Edge safe HMAC session tokens
 │       ├── conversationTitle.ts       # Shared title generator
+│       ├── featureStorage.ts          # Memory, prompts, shares, feedback, schedules
+│       ├── memory.ts                  # Memory extraction engine
+│       ├── contextMeter.ts            # Context window estimation
+│       ├── scheduleRunner.ts          # Cron evaluation & execution
 │       ├── crypto.ts                  # AES-256-GCM encryption & redaction
 │       └── storage.ts                 # Database & in-memory persistence
 ├── supabase/
 │   └── migrations/
 │       ├── 20261018000000_init_hyunk_ai_hub.sql
 │       ├── 20261019000001_fix_and_features.sql
-│       └── 20261020000000_agent_skills.sql
+│       ├── 20261020000000_agent_skills.sql
+│       └── 20261021000000_features_memory_share_schedule.sql
 ├── vitest.config.ts
 ├── tailwind.config.ts
 └── next.config.mjs

@@ -31,6 +31,11 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
+  // The public share reader is authenticated by its token, not by a session.
+  if (pathname.startsWith('/api/share/')) {
+    return NextResponse.next();
+  }
+
   const token = req.cookies.get(SESSION_COOKIE_NAME)?.value || extractBearerToken(req);
 
   if (!token) {

@@ -21,6 +21,8 @@ import {
   MoreVertical,
   Sliders,
   Download,
+  Brain,
+  CalendarClock,
 } from 'lucide-react';
 import { ConversationSummary, FolderItem } from '@/lib/storage';
 import { UserProfileMenu } from './UserProfileMenu';
@@ -40,6 +42,11 @@ interface SidebarProps {
   onOpenShortcuts: () => void;
   onOpenDownloadApp?: () => void;
   onOpenExport?: () => void;
+  onOpenTrash?: () => void;
+  /** Incremented by the parent to focus the search input (Ctrl+Shift+F). */
+  searchFocusToken?: number;
+  onOpenMemory?: () => void;
+  onOpenSchedules?: () => void;
   isOpen: boolean;
   onToggleOpen: () => void;
   theme: 'dark' | 'light';
@@ -61,16 +68,32 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onOpenShortcuts,
   onOpenDownloadApp,
   onOpenExport,
+  onOpenTrash,
+  searchFocusToken = 0,
+  onOpenMemory,
+  onOpenSchedules,
   isOpen,
   onToggleOpen,
   theme,
   onToggleTheme,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
+  const [activeTag, setActiveTag] = useState<string | null>(null);
   const [searchResults, setSearchResults] = useState<Array<{ conversationId: string; snippet?: string }>>([]);
   const [collapsedFolders, setCollapsedFolders] = useState<Record<string, boolean>>({});
   const [isCreatingFolder, setIsCreatingFolder] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
+
+  // Focus the search input when the parent requests it (Ctrl/Cmd + Shift + F)
+  useEffect(() => {
+    if (!searchFocusToken) return;
+    const timer = setTimeout(() => {
+      const input = document.getElementById('sidebar-search-input') as HTMLInputElement | null;
+      input?.focus();
+      input?.select();
+    }, 120);
+    return () => clearTimeout(timer);
+  }, [searchFocusToken]);
 
   // Search effect
   useEffect(() => {
@@ -121,8 +144,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
     }
   };
 
+  // Every tag used by the conversations of the user
+  const allTags = Array.from(
+    new Set(conversations.flatMap((c) => c.tags || []).filter(Boolean))
+  ).sort((a, b) => a.localeCompare(b));
+
   // Filter conversations
   const filteredConversations = conversations.filter((c) => {
+    if (activeTag && !(c.tags || []).some((tag) => tag.toLowerCase() === activeTag.toLowerCase())) {
+      return false;
+    }
     if (!searchTerm.trim()) return true;
     const term = searchTerm.toLowerCase();
     const titleMatch = c.title.toLowerCase().includes(term);
@@ -218,6 +249,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <div className="relative">
             <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-500" />
             <input
+              id="sidebar-search-input"
               type="text"
               placeholder="Search chat history & messages..."
               value={searchTerm}
@@ -229,6 +261,36 @@ export const Sidebar: React.FC<SidebarProps> = ({
               }`}
             />
           </div>
+          {/* Tag filter */}
+          {allTags.length > 0 && (
+            <div className="flex items-center gap-1.5 flex-wrap mt-2">
+              <button
+                type="button"
+                onClick={() => setActiveTag(null)}
+                className={`px-2 py-0.5 rounded-lg text-[10px] font-medium border transition ${
+                  activeTag === null
+                    ? 'bg-violet-500/15 text-violet-300 border-violet-500/40'
+                    : 'bg-slate-900/60 text-slate-500 border-slate-800 hover:text-slate-300'
+                }`}
+              >
+                Semua
+              </button>
+              {allTags.map((tag) => (
+                <button
+                  key={tag}
+                  type="button"
+                  onClick={() => setActiveTag((prev) => (prev === tag ? null : tag))}
+                  className={`px-2 py-0.5 rounded-lg text-[10px] font-medium border transition ${
+                    activeTag === tag
+                      ? 'bg-violet-500/15 text-violet-300 border-violet-500/40'
+                      : 'bg-slate-900/60 text-slate-500 border-slate-800 hover:text-slate-300'
+                  }`}
+                >
+                  #{tag}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Conversations & Folders List */}
@@ -428,6 +490,33 @@ export const Sidebar: React.FC<SidebarProps> = ({
             >
               <Download className="w-4 h-4 text-cyan-400 shrink-0" />
               <span className="truncate">Download Apps (Windows &amp; APK)</span>
+            </button>
+          )}
+          {onOpenMemory && (
+            <button
+              onClick={() => handleItemClick(onOpenMemory)}
+              className="flex items-center gap-2.5 w-full px-3 py-2 rounded-xl text-xs text-slate-300 hover:text-white hover:bg-slate-900 transition"
+            >
+              <Brain className="w-4 h-4 text-violet-400 shrink-0" />
+              <span className="truncate">AI Memory</span>
+            </button>
+          )}
+          {onOpenSchedules && (
+            <button
+              onClick={() => handleItemClick(onOpenSchedules)}
+              className="flex items-center gap-2.5 w-full px-3 py-2 rounded-xl text-xs text-slate-300 hover:text-white hover:bg-slate-900 transition"
+            >
+              <CalendarClock className="w-4 h-4 text-emerald-400 shrink-0" />
+              <span className="truncate">Jadwal Otomatis</span>
+            </button>
+          )}
+          {onOpenTrash && (
+            <button
+              onClick={() => handleItemClick(onOpenTrash)}
+              className="flex items-center gap-2.5 w-full px-3 py-2 rounded-xl text-xs text-slate-300 hover:text-white hover:bg-slate-900 transition"
+            >
+              <Trash2 className="w-4 h-4 text-amber-400 shrink-0" />
+              <span className="truncate">Sampah</span>
             </button>
           )}
           <button

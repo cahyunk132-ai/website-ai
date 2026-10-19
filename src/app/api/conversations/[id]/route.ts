@@ -6,6 +6,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import {
   getConversationMessages,
   deleteConversation,
+  trashConversation,
   updateConversation,
   ConversationSummary,
 } from '@/lib/storage';
@@ -47,6 +48,13 @@ export async function PATCH(
     if (json.folderId !== undefined) updates.folderId = json.folderId;
     if (typeof json.systemPrompt === 'string') updates.systemPrompt = json.systemPrompt;
     if (typeof json.temperature === 'number') updates.temperature = json.temperature;
+    if (Array.isArray(json.tags)) {
+      updates.tags = json.tags
+        .filter((tag: unknown): tag is string => typeof tag === 'string')
+        .map((tag: string) => tag.trim().slice(0, 40))
+        .filter(Boolean)
+        .slice(0, 12);
+    }
 
     const updated = await updateConversation(id, updates);
     return NextResponse.json({ conversation: updated });
@@ -62,8 +70,20 @@ export async function DELETE(
 ) {
   try {
     const { id } = params;
-    await deleteConversation(id);
-    return NextResponse.json({ success: true, deletedId: id });
+    // A normal delete moves the conversation to the trash so it can be
+    // restored. `?permanent=true` removes it for good.
+    const permanent = req.nextUrl.searchParams.get('permanent') === 'true';
+
+    if (permanent) {
+      await deleteConversation(id);
+      return NextResponse.json({ success: true, deletedId: id, permanent: true });
+    }
+
+    const trashed = await trashConversation(id);
+    if (!trashed) {
+      return NextResponse.json({ error: 'Conversation not found' }, { status: 404 });
+    }
+    return NextResponse.json({ success: true, deletedId: id, trashed: true });
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Failed to delete conversation';
     return NextResponse.json({ error: msg }, { status: 500 });
