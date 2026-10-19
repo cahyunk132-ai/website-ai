@@ -92,7 +92,17 @@
   - Syntax highlighted code blocks with one-click **Copy Code** and language badges.
   - One-click **Regenerate Response** and **Copy Message**.
   - Accessible contrast, keyboard shortcuts, and responsive mobile drawer.
-- **Premium Plans (Free & Premium)**: the subscription plan decides how many AI prompts an account may send per day. A **free** account gets **5 prompts per day**, a **premium** account gets **10x** as many (**50 prompts per day**). The quota is enforced on the server before any provider call, the remaining quota is shown live in the composer, and the **Hyunk Premium** panel (crown icon in the user menu, also in the command palette) compares the two plans and upgrades the account in one click. The plan lives in the `user_plans` table and is only reachable with the service role, so a user can never raise his own quota. An administrator can grant or revoke the plan of any account by email.
+- **Role & Tier (6 level akses)**: tiap akun punya **role** — `admin`, `free`, `premium1`, `premium2`, `premium3`, `premium4` — yang menentukan tiga hal sekaligus: kuota request per hari, panjang maksimum jawaban, dan model apa saja yang boleh dipakai.
+  | Role | Tier | Request / hari | Maks token | Riwayat |
+  |------|------|----------------|------------|---------|
+  | 🆓 Free | 0 | 20 | 2.048 | 10 pesan |
+  | ⭐ Premium 1 | 1 | 100 | 4.096 | 30 pesan |
+  | ⭐⭐ Premium 2 | 2 | 200 | 8.192 | 50 pesan |
+  | ⭐⭐⭐ Premium 3 | 3 | 500 | 16.000 | 80 pesan |
+  | 💎 Premium 4 | 4 | 1.000 | 32.000 | 100 pesan |
+  | 👑 Admin | 4 | tanpa batas | 32.000 | 100 pesan |
+
+  Setiap model punya `minTier`: model yang butuh tier lebih tinggi tampil **terkunci 🔒** di model selector dengan tooltip "Butuh Premium X", dan server menolak request-nya dengan **403**. Fallback otomatis juga tidak pernah membuka model di luar tier akun. Role disimpan di tabel `user_roles` (hanya service role yang boleh akses, jadi user tidak bisa menaikkan role-nya sendiri), dengan fallback ke `user_metadata.role` lalu ke paket langganan. Semua batas bisa dituning lewat environment variable (`FREE_DAILY_REQUEST_LIMIT`, `PREMIUM2_MAX_TOKENS`, …).
 - **Collision Free Toolbar**: every action sits directly in the header (**Skills**, **Tools**, **Palette**, **Memory**, **Jadwal**, **Share**, **Sampah**, **Export**, **Download**, **Key Pool**) as a compact icon button with its name in the tooltip, so there is no extra "More" click and the buttons can never overlap on a narrow laptop. The model selector shrinks with an ellipsis instead of being squeezed, and the toolbar scrolls as a last resort.
 - **Working Sidebar Toggle**: the hamburger button collapses the sidebar on a desktop (the chat area then uses the full width) and opens the drawer on a phone. The icon follows the state and `Ctrl+B` does the same.
 
@@ -156,6 +166,7 @@ Apply the migrations in your Supabase SQL editor (in chronological order):
 ```bash
 supabase/migrations/20261018000000_init_hyunk_ai_hub.sql   # base schema
 supabase/migrations/20261019000001_fix_and_features.sql    # folders, quota, multi-key pool
+supabase/migrations/20261019000002_roles.sql               # role & tier (user_roles, usage_logs.role)
 supabase/migrations/20261020000000_agent_skills.sql        # skill library + 12 seeded skills
 supabase/migrations/20261021000000_features_memory_share_schedule.sql  # memory, prompts, shares, feedback, schedules, tags, trash
 supabase/migrations/20261022000000_premium_plans.sql        # subscription plans (free / premium)
@@ -188,6 +199,12 @@ The fifth migration adds the `user_plans` table (`plan` = `free` | `premium`,
 the service role: the plan decides the daily quota, so it must never be writable
 by the user himself.
 
+The roles migration adds the `user_roles` table (the manual role override of an
+administrator: `admin` | `free` | `premium1` .. `premium4`) and the `role` column of
+`usage_logs`, so the usage can be attributed to a tier. The table is restricted to
+the service role, the RLS policy only allows administrators to read and write it.
+The seeded administrator (`admin@hyunkai.com`) receives the `admin` role.
+
 The fourth migration adds the storage of the new features: the `user_memories` table
 (AI memory), `user_prompts` (prompt library), `conversation_shares` (public share
 links), `message_feedback` (thumbs up / down), `scheduled_runs` (cron) plus the
@@ -208,10 +225,15 @@ Open [http://localhost:3000](http://localhost:3000) to start chatting.
 Default accounts (seeded into Supabase Auth on first login, and available in local
 memory mode):
 
-| Role  | Email                | Password      |
-| ----- | -------------------- | ------------- |
-| Admin | `admin@hyunkai.com`  | `Password123!`|
-| User  | `demo@hyunkai.com`   | `demo1234`    |
+| Role       | Email                | Password      |
+| ---------- | -------------------- | ------------- |
+| 👑 Admin   | `admin@hyunkai.com`  | `Password123!`|
+| 🆓 Free    | `demo@hyunkai.com`   | `demo1234`    |
+
+Every new account starts on the role `free` (tier 0). The role of an account is
+changed by an administrator on the page `/admin/users` (or in the Hyunk Premium
+panel): it is written to the `user_roles` table and applies to the very next
+request - a new login is not needed.
 
 ### 7. Run Unit Tests
 ```bash
@@ -243,13 +265,16 @@ website-ai/
 │   │   │   ├── feedback/route.ts      # Thumbs up / down per message
 │   │   │   ├── usage/daily/route.ts   # Daily usage for the activity chart
 │   │   │   ├── premium/route.ts       # Plan, quota and upgrade of the account
+│   │   │   ├── admin/users/route.ts   # Admin API: list users & change their role
 │   │   │   └── conversations/         # Conversation CRUD endpoints
 │   │   ├── globals.css                # Dark theme & styling
 │   │   ├── layout.tsx                 # Root layout & metadata
 │   │   └── page.tsx                   # Main chat interface
+│   ├── admin/
+│   │   └── users/page.tsx             # Admin page: manage the role of the users
 │   ├── components/
 │   │   ├── Sidebar.tsx                # History & navigation drawer
-│   │   ├── ModelSelector.tsx          # Provider & model picker
+│   │   ├── ModelSelector.tsx          # Provider & model picker (locks a higher tier)
 │   │   ├── UsageDashboardModal.tsx    # Quota telemetry modal
 │   │   ├── SettingsModal.tsx          # API key encryption modal
 │   │   ├── SkillsModal.tsx            # Skill library: browse, pin, author
@@ -261,8 +286,9 @@ website-ai/
 │   │   ├── TrashModal.tsx             # Trash & restore
 │   │   ├── UsageChart.tsx             # 7 day activity chart
 │   │   ├── ContextMeter.tsx           # Context window indicator
-│   │   ├── PremiumPanel.tsx           # Plan comparison, quota and upgrade
-│   │   ├── QuotaMeter.tsx             # Daily prompt quota in the composer
+│   │   ├── PremiumPanel.tsx           # Tier ladder, quota and upgrade
+│   │   ├── QuotaMeter.tsx             # Daily request quota in the composer
+│   │   ├── AdminUsersPanel.tsx        # Admin table: role per user & usage today
 │   │   ├── AgentReasoningCard.tsx     # Reasoning, tool outputs & agent timeline
 │   │   └── ui/
 │   │       ├── CodeBlock.tsx          # Syntax highlighted code
@@ -272,7 +298,8 @@ website-ai/
 │       ├── ai/
 │       │   ├── types.ts               # Core AI contracts
 │       │   ├── errors.ts              # Normalized error classes
-│       │   ├── models.ts              # Model capability registry
+│       │   ├── models.ts              # Model capability registry (with minTier)
+│       │   ├── tiers.ts               # Role & tier definitions (quota, tokens, context)
 │       │   ├── usage.ts               # Token estimation & metrics
 │       │   ├── router.ts              # Fallback router engine
 │       │   ├── tools.ts               # Agent tool registry & sandboxed executors
@@ -297,6 +324,7 @@ website-ai/
 │       ├── memory.ts                  # Memory extraction engine
 │       ├── contextMeter.ts            # Context window estimation
 │       ├── plans.ts                   # Free / premium plans and the daily quota
+│       ├── roles.ts                   # Role storage & resolution (user_roles)
 │       ├── scheduleRunner.ts          # Cron evaluation & execution
 │       ├── crypto.ts                  # AES-256-GCM encryption & redaction
 │       └── storage.ts                 # Database & in-memory persistence

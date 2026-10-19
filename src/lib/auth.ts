@@ -13,6 +13,8 @@ import {
   createSessionToken,
   verifySessionToken,
 } from './sessionToken';
+import { UserRole, getTierForRole, isUserRole } from './ai/tiers';
+import { getEffectiveRole } from './roles';
 
 export { SESSION_COOKIE_NAME, SESSION_MAX_AGE_SECONDS, createSessionToken, verifySessionToken };
 export type { UserSession };
@@ -23,7 +25,15 @@ interface LocalStoredUser {
   name: string;
   passwordHash: string;
   salt: string;
-  role: 'admin' | 'user';
+  role: UserRole;
+  createdAt: string;
+}
+
+export interface LocalUserSummary {
+  id: string;
+  email: string;
+  name: string;
+  role: UserRole;
   createdAt: string;
 }
 
@@ -52,7 +62,7 @@ export const DEFAULT_USER_ACCOUNTS = [
     email: 'demo@hyunkai.com',
     password: 'demo1234',
     name: 'Demo User',
-    role: 'user' as const,
+    role: 'free' as const,
   },
 ];
 
@@ -186,7 +196,7 @@ function syncLocalUserId(
   email: string,
   supabaseUserId: string,
   name: string,
-  role: 'admin' | 'user'
+  role: UserRole
 ): void {
   const existing = memoryUsers.get(email);
   if (!existing) return;
@@ -223,10 +233,9 @@ export async function registerUser(
   await ensureDefaultUsersInSupabase();
 
   let userId: string = crypto.randomUUID();
-  let role: 'admin' | 'user' = 'user';
-  if (email.includes('admin')) {
-    role = 'admin';
-  }
+  // Every new account starts on the free tier. Only an administrator can
+  // raise a role, never the registration itself.
+  const role: UserRole = 'free';
 
   // 1. Attempt Supabase Admin Registration
   const adminClient = getSupabaseAdmin();
@@ -278,6 +287,7 @@ export async function registerUser(
     email,
     name,
     role,
+    tier: getTierForRole(role),
     createdAt: now,
   };
 
@@ -314,12 +324,19 @@ export async function loginUser(
       if (!error && data?.user) {
         const u = data.user;
         const name = u.user_metadata?.name || email.split('@')[0];
-        const role = u.user_metadata?.role || (email.includes('admin') ? 'admin' : 'user');
+        // The role is resolved on every login: the manual override of an
+        // administrator wins over the role of the account and over the plan.
+        const role = await getEffectiveRole(
+          u.id,
+          u.email || email,
+          u.user_metadata?.role
+        );
         const sessionUser: UserSession = {
           id: u.id,
           email: u.email || email,
           name,
           role,
+          tier: getTierForRole(role),
           createdAt: u.created_at || new Date().toISOString(),
         };
         const token = await createSessionToken(sessionUser);
@@ -340,6 +357,7 @@ export async function loginUser(
         email: localUser.email,
         name: localUser.name,
         role: localUser.role,
+        tier: getTierForRole(localUser.role),
         createdAt: localUser.createdAt,
       };
       const token = await createSessionToken(sessionUser);
@@ -377,6 +395,21 @@ export function findLocalUserIdByEmail(email: string): string | null {
   ensureDefaultUsers();
   const found = memoryUsers.get(email.trim().toLowerCase());
   return found?.id ?? null;
+}
+
+/**
+ * All accounts of the local fallback store. Used by the admin page when no
+ * database is configured.
+ */
+export function listLocalUsers(): LocalUserSummary[] {
+  ensureDefaultUsers();
+  return Array.from(memoryUsers.values()).map((user) => ({
+    id: user.id,
+    email: user.email,
+    name: user.name,
+    role: isUserRole(user.role) ? user.role : 'free',
+    createdAt: user.createdAt,
+  }));
 }
 
 export async function getSessionFromRequest(request: Request): Promise<UserSession | null> {

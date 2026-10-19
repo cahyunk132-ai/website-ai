@@ -11,7 +11,9 @@ import {
   Users,
   Loader2,
   ArrowRight,
+  Lock,
 } from 'lucide-react';
+import { Tier, UserRole, TIER_CONFIGS, USER_ROLES } from '@/lib/ai/tiers';
 
 export type PlanId = 'free' | 'premium';
 
@@ -33,30 +35,41 @@ interface PremiumPanelProps {
   remaining: number;
   resetsAt?: string;
   isAdmin: boolean;
+  role?: UserRole;
+  tier?: Tier;
+  tierLabel?: string;
+  tierBadge?: string;
+  unlimited?: boolean;
   onPlanChanged: (plan: PlanId) => void;
+  onRoleChanged?: () => void;
 }
 
 /**
- * Premium panel: shows the quota of the current plan, compares Free and
- * Premium and lets the user activate the premium plan. An administrator can
- * additionally change the plan of any account.
+ * Premium panel: shows the quota of the current tier, compares the tiers and
+ * lets the user activate the premium plan. An administrator can additionally
+ * change the role of any account.
  */
 export const PremiumPanel: React.FC<PremiumPanelProps> = ({
   isOpen,
   onClose,
   plan,
   used,
-  limit,
   remaining,
   resetsAt,
   isAdmin,
+  role = 'free',
+  tier = 0,
+  tierLabel = 'Free',
+  tierBadge = '🆓',
+  unlimited = false,
   onPlanChanged,
+  onRoleChanged,
 }) => {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [adminEmail, setAdminEmail] = useState('');
-  const [adminPlan, setAdminPlan] = useState<PlanId>('premium');
+  const [adminRole, setAdminRole] = useState<UserRole>('premium2');
   const [adminBusy, setAdminBusy] = useState(false);
   const [adminMessage, setAdminMessage] = useState<string | null>(null);
 
@@ -79,9 +92,10 @@ export const PremiumPanel: React.FC<PremiumPanelProps> = ({
 
   if (!isOpen) return null;
 
+  const limit = unlimited ? 0 : Math.max(0, used + remaining);
   const percent = limit > 0 ? Math.min(100, Math.round((used / limit) * 100)) : 0;
-  const isPremium = plan === 'premium';
-  const exhausted = remaining <= 0;
+  const exhausted = !unlimited && remaining <= 0;
+  const isPremium = plan === 'premium' || role !== 'free';
 
   const activate = async (action: 'upgrade' | 'downgrade') => {
     setBusy(true);
@@ -100,10 +114,11 @@ export const PremiumPanel: React.FC<PremiumPanelProps> = ({
       }
       setSuccess(
         action === 'upgrade'
-          ? 'Premium aktif! Kuota kamu kini 10x lebih besar.'
+          ? `Premium aktif! Kamu sekarang di tier ${data.tierLabel} (${data.tier} request per hari).`
           : 'Paket dikembalikan ke mode gratis.'
       );
       onPlanChanged(data.plan as PlanId);
+      onRoleChanged?.();
     } catch {
       setError('Gagal menghubungi server.');
     } finally {
@@ -111,7 +126,7 @@ export const PremiumPanel: React.FC<PremiumPanelProps> = ({
     }
   };
 
-  const saveAdminPlan = async () => {
+  const saveAdminRole = async () => {
     if (!adminEmail.trim()) {
       setAdminMessage('Email pengguna wajib diisi.');
       return;
@@ -122,15 +137,16 @@ export const PremiumPanel: React.FC<PremiumPanelProps> = ({
       const res = await fetch('/api/premium', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'set', email: adminEmail.trim(), plan: adminPlan }),
+        body: JSON.stringify({ action: 'setRole', email: adminEmail.trim(), role: adminRole }),
       });
       const data = await res.json();
       if (!res.ok) {
-        setAdminMessage(data.error || 'Gagal menyimpan plan.');
+        setAdminMessage(data.error || 'Gagal menyimpan role.');
         return;
       }
-      setAdminMessage(`Plan ${data.planLabel} berhasil diberikan ke ${data.email}.`);
+      setAdminMessage(`Role ${data.email} berhasil diubah menjadi ${data.tierLabel}.`);
       setAdminEmail('');
+      onRoleChanged?.();
     } catch {
       setAdminMessage('Gagal menghubungi server.');
     } finally {
@@ -138,34 +154,7 @@ export const PremiumPanel: React.FC<PremiumPanelProps> = ({
     }
   };
 
-  const plans: PlanInfo[] = [
-    {
-      id: 'free',
-      label: 'Gratis',
-      tagline: 'Untuk coba-coba dan pertanyaan singkat',
-      dailyPromptLimit: 5,
-      priceLabel: 'Gratis',
-      features: [
-        '5 prompt AI per hari',
-        'Seluruh model free tier (Radox & InkStone)',
-        'Riwayat percakapan, folder, dan tag',
-        'AI Memory & Prompt Library',
-      ],
-    },
-    {
-      id: 'premium',
-      label: 'Premium',
-      tagline: 'Untuk kerja harian yang tidak boleh nunggu',
-      dailyPromptLimit: 50,
-      priceLabel: 'Rp 99.000 / bulan',
-      features: [
-        '50 prompt AI per hari (10x)',
-        'Model premium tanpa batas kuota harian',
-        'Konteks panjang, Agent Mode & tool keamanan',
-        'Jadwal otomatis, export, dan bagikan',
-      ],
-    },
-  ];
+  const ladder = USER_ROLES.map((id) => ({ id, config: TIER_CONFIGS[id] }));
 
   return (
     <div
@@ -185,12 +174,15 @@ export const PremiumPanel: React.FC<PremiumPanelProps> = ({
             <div>
               <h2 className="text-base font-bold text-slate-100">Hyunk Premium</h2>
               <p className="text-[11px] text-slate-400">
-                Paket gratis {plan === 'premium' ? 'ditinggalkan' : 'aktif'} &middot; kuota
-                harian{' '}
-                {isPremium ? (
-                  <span className="text-amber-400 font-semibold">{limit} prompt</span>
+                Tier kamu:{' '}
+                <span className="text-amber-400 font-semibold">
+                  {tierBadge} {tierLabel}
+                </span>{' '}
+                (tier {tier}) &middot; kuota harian{' '}
+                {unlimited ? (
+                  <span className="text-amber-400 font-semibold">tak terbatas</span>
                 ) : (
-                  <span className="text-cyan-400 font-semibold">{limit} prompt</span>
+                  <span className="text-cyan-400 font-semibold">{limit} request</span>
                 )}
               </p>
             </div>
@@ -210,13 +202,13 @@ export const PremiumPanel: React.FC<PremiumPanelProps> = ({
             <div className="flex items-center justify-between text-xs mb-2">
               <span className="font-semibold text-slate-200 flex items-center gap-1.5">
                 <Zap className="w-3.5 h-3.5 text-cyan-400" />
-                Prompt hari ini
+                Request hari ini
               </span>
               <span className="tabular-nums text-slate-400">
                 <span className={exhausted ? 'text-red-400 font-semibold' : 'text-slate-100 font-semibold'}>
                   {used}
                 </span>{' '}
-                / {limit}
+                / {unlimited ? '∞' : limit}
               </span>
             </div>
             <div className="h-2.5 rounded-full bg-slate-800 overflow-hidden">
@@ -234,69 +226,83 @@ export const PremiumPanel: React.FC<PremiumPanelProps> = ({
               />
             </div>
             <p className="text-[11px] text-slate-500 mt-2">
-              {exhausted
-                ? 'Kuota hari ini sudah habis. Kuota direset pukul 00:00 UTC.'
-                : `Sisa ${remaining} prompt lagi hari ini. Kuota direset pukul 00:00 UTC.`}
+              {unlimited
+                ? 'Akun ini tidak punya batas request harian.'
+                : exhausted
+                  ? 'Kuota hari ini sudah habis. Kuota direset pukul 00:00 UTC.'
+                  : `Sisa ${remaining} request lagi hari ini. Kuota direset pukul 00:00 UTC.`}
             </p>
           </section>
 
-          {/* Plan comparison */}
-          <section className="grid sm:grid-cols-2 gap-3">
-            {plans.map((definition) => {
-              const active = definition.id === plan;
-              return (
-                <div
-                  key={definition.id}
-                  className={`rounded-2xl border p-4 relative transition ${
-                    active
-                      ? definition.id === 'premium'
+          {/* Tier ladder */}
+          <section className="space-y-2">
+            <h3 className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+              <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
+              Pilih tier yang kamu butuhkan
+            </h3>
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2.5">
+              {ladder.map(({ id: roleId, config: definition }) => {
+                const isCurrent = role === roleId;
+                return (
+                  <div
+                    key={roleId}
+                    className={`rounded-2xl border p-3.5 relative transition ${
+                      isCurrent
                         ? 'border-amber-500/60 bg-amber-950/20 shadow-lg shadow-amber-950/20'
-                        : 'border-cyan-500/60 bg-cyan-950/20'
-                      : 'border-slate-800 bg-slate-900/40'
-                  }`}
-                >
-                  {active && (
-                    <span
-                      className={`absolute -top-2 right-3 text-[9px] font-bold px-2 py-0.5 rounded-full ${
-                        definition.id === 'premium'
-                          ? 'bg-amber-500 text-slate-950'
-                          : 'bg-cyan-500 text-slate-950'
-                      }`}
-                    >
-                      PAKET ANDA
-                    </span>
-                  )}
-                  <div className="flex items-center gap-2 mb-1">
-                    {definition.id === 'premium' ? (
-                      <Crown className="w-4 h-4 text-amber-400" />
-                    ) : (
-                      <Sparkles className="w-4 h-4 text-cyan-400" />
+                        : 'border-slate-800 bg-slate-900/40'
+                    }`}
+                  >
+                    {isCurrent && (
+                      <span className="absolute -top-2 right-3 text-[9px] font-bold px-2 py-0.5 rounded-full bg-amber-500 text-slate-950">
+                        TIER KAMU
+                      </span>
                     )}
-                    <h3 className="text-sm font-bold text-slate-100">{definition.label}</h3>
-                    <span className="ml-auto text-[11px] font-semibold text-slate-300">
-                      {definition.priceLabel}
-                    </span>
-                  </div>
-                  <p className="text-[11px] text-slate-400 mb-3">{definition.tagline}</p>
-                  <p className="text-2xl font-bold text-slate-100 mb-3">
-                    {definition.dailyPromptLimit}
-                    <span className="text-xs font-medium text-slate-400 ml-1">prompt / hari</span>
-                  </p>
-                  <ul className="space-y-1.5">
-                    {definition.features.map((feature) => (
-                      <li key={feature} className="flex items-start gap-2 text-[11px] text-slate-300">
-                        <Check
-                          className={`w-3.5 h-3.5 mt-0.5 shrink-0 ${
-                            definition.id === 'premium' ? 'text-amber-400' : 'text-cyan-400'
-                          }`}
-                        />
-                        <span>{feature}</span>
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-base" aria-hidden>
+                        {definition.badge}
+                      </span>
+                      <h4 className="text-xs font-bold text-slate-100">{definition.name}</h4>
+                      {definition.tier > 0 && (
+                        <span className="ml-auto text-[9px] font-mono px-1.5 py-0.5 rounded bg-slate-800 text-slate-400">
+                          T{definition.tier}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[10px] text-slate-400 mb-2 leading-relaxed">
+                      {definition.description}
+                    </p>
+                    <p className="text-lg font-bold text-slate-100">
+                      {Number.isFinite(definition.dailyRequestLimit) ? (
+                        <>
+                          {definition.dailyRequestLimit}
+                          <span className="text-[10px] font-medium text-slate-400 ml-1">
+                            request / hari
+                          </span>
+                        </>
+                      ) : (
+                        <span className="text-base">tak terbatas</span>
+                      )}
+                    </p>
+                    <ul className="mt-2 space-y-1">
+                      <li className="text-[10px] text-slate-400 flex items-center gap-1.5">
+                        <Check className="w-3 h-3 text-emerald-400" />
+                        Maks {definition.maxTokensPerRequest.toLocaleString('id-ID')} token jawaban
                       </li>
-                    ))}
-                  </ul>
-                </div>
-              );
-            })}
+                      <li className="text-[10px] text-slate-400 flex items-center gap-1.5">
+                        <Check className="w-3 h-3 text-emerald-400" />
+                        {definition.maxContextMessages} pesan riwayat
+                      </li>
+                      <li className="text-[10px] text-slate-400 flex items-center gap-1.5">
+                        <Check className="w-3 h-3 text-emerald-400" />
+                        {definition.tier === 0
+                          ? 'Model tier 0'
+                          : `Model tier 0 - ${definition.tier}`}
+                      </li>
+                    </ul>
+                  </div>
+                );
+              })}
+            </div>
           </section>
 
           {/* Action */}
@@ -305,7 +311,7 @@ export const PremiumPanel: React.FC<PremiumPanelProps> = ({
               <>
                 <div className="flex-1 text-[11px] text-amber-300/90 flex items-center gap-1.5">
                   <ShieldCheck className="w-4 h-4 text-amber-400" />
-                  Premium aktif: {limit} prompt per hari (10x paket gratis).
+                  Tier {tierLabel} aktif: {unlimited ? 'kuota tak terbatas' : `${limit} request per hari`}.
                 </div>
                 <button
                   onClick={() => activate('downgrade')}
@@ -319,8 +325,8 @@ export const PremiumPanel: React.FC<PremiumPanelProps> = ({
             ) : (
               <>
                 <div className="flex-1 text-[11px] text-slate-400">
-                  Paket gratis hanya boleh {limit} prompt per hari. Premium memberi{' '}
-                  <span className="text-amber-400 font-semibold">10x</span> ({50} prompt).
+                  Paket gratis hanya boleh <span className="text-cyan-400 font-semibold">20 request</span> per
+                  hari. Premium membuka tier yang lebih tinggi.
                 </div>
                 <button
                   onClick={() => activate('upgrade')}
@@ -349,15 +355,15 @@ export const PremiumPanel: React.FC<PremiumPanelProps> = ({
             </p>
           )}
 
-          {/* Admin: manage the plan of another account */}
+          {/* Admin: manage the role of another account */}
           {isAdmin && (
             <section className="rounded-2xl border border-slate-800 bg-slate-900/40 p-4">
               <h3 className="text-xs font-bold text-slate-200 flex items-center gap-1.5 mb-1">
                 <Users className="w-3.5 h-3.5 text-cyan-400" />
-                Kelola plan pengguna (admin)
+                Berikan tier ke akun lain (admin)
               </h3>
               <p className="text-[11px] text-slate-500 mb-3">
-                Berikan paket premium ke akun lain berdasarkan emailnya.
+                Role ditulis ke tabel <span className="font-mono">user_roles</span> dan berlaku seketika.
               </p>
               <div className="flex flex-col sm:flex-row gap-2">
                 <input
@@ -368,15 +374,18 @@ export const PremiumPanel: React.FC<PremiumPanelProps> = ({
                   className="flex-1 px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-slate-200 text-xs focus:outline-none focus:border-cyan-500 placeholder:text-slate-600"
                 />
                 <select
-                  value={adminPlan}
-                  onChange={(event) => setAdminPlan(event.target.value as PlanId)}
+                  value={adminRole}
+                  onChange={(event) => setAdminRole(event.target.value as UserRole)}
                   className="px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-slate-200 text-xs focus:outline-none focus:border-cyan-500"
                 >
-                  <option value="premium">Premium</option>
-                  <option value="free">Gratis</option>
+                  {USER_ROLES.map((id) => (
+                    <option key={id} value={id}>
+                      {TIER_CONFIGS[id].badge} {TIER_CONFIGS[id].name}
+                    </option>
+                  ))}
                 </select>
                 <button
-                  onClick={saveAdminPlan}
+                  onClick={saveAdminRole}
                   disabled={adminBusy}
                   className="px-4 py-2 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold transition disabled:opacity-60 flex items-center justify-center gap-1.5"
                 >
@@ -391,6 +400,13 @@ export const PremiumPanel: React.FC<PremiumPanelProps> = ({
               {adminMessage && (
                 <p className="text-[11px] text-cyan-300 mt-2">{adminMessage}</p>
               )}
+              <a
+                href="/admin/users"
+                className="inline-flex items-center gap-1.5 mt-3 text-[11px] text-cyan-300 hover:underline"
+              >
+                <Lock className="w-3 h-3" />
+                Buka halaman kelola role lengkap
+              </a>
             </section>
           )}
         </div>

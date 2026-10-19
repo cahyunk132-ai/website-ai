@@ -9,8 +9,16 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { defaultRouter } from '@/lib/ai/router';
 import { ProviderId, ChatMessage, FileAttachment } from '@/lib/ai/types';
-import { saveMessage, createConversation, checkAndIncrementUsage } from '@/lib/storage';
-import { getUserPlan, planFor, dailyLimitFor, isPremiumPlan } from '@/lib/plans';
+import {
+  saveMessage,
+  createConversation,
+  checkAndIncrementUsage,
+  recordUsageRole,
+} from '@/lib/storage';
+import { getUserPlan, planFor, isPremiumPlan } from '@/lib/plans';
+import { getEffectiveRole } from '@/lib/roles';
+import { getTierConfig, canAccessTier, roleForModel, tierLabel } from '@/lib/ai/tiers';
+import { getModelById } from '@/lib/ai/models';
 import { executeWebSearch } from '@/lib/ai/tools';
 import { getSessionFromRequest } from '@/lib/auth';
 import { buildConversationTitle } from '@/lib/conversationTitle';
@@ -75,40 +83,17 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Enforce the per-user daily quota before any provider call is made.
-    // The quota depends on the subscription plan: a free account may send
-    // 5 prompts per day, a premium account 10x as many.
-    // Malformed requests are rejected before they are counted.
-    const plan = await getUserPlan(user.id);
-    const planLimit = dailyLimitFor(plan);
-    const usage = await checkAndIncrementUsage(user.id, planLimit);
-    if (!usage.allowed) {
-      const planLabel = planFor(plan).label;
-      const upgradeHint = isPremiumPlan(plan)
-        ? 'Coba lagi besok, kuota premium direset setiap pukul 00:00 UTC.'
-        : 'Upgrade ke Premium untuk 10x kuota harian, atau coba lagi besok pukul 00:00 UTC.';
+    // ---------------------------------------------------------------------
+    // Role & tier: the role decides the quota, the answer length and which
+    // models may be used. It is resolved on every request, an upgrade is
+    // therefore visible immediately and never needs a new login.
+    // ---------------------------------------------------------------------
+    const role = await getEffectiveRole(user.id, user.email);
+    const tierConfig = getTierConfig(role);
+    const tier = tierConfig.tier;
 
-      return NextResponse.json(
-        {
-          error: `Batas prompt harian paket ${planLabel} (${usage.limit} prompt) telah tercapai. ${upgradeHint}`,
-          code: 'PLAN_LIMIT_REACHED',
-          plan,
-          planLabel,
-          limit: usage.limit,
-          remaining: 0,
-          upgradeAvailable: !isPremiumPlan(plan),
-        },
-        {
-          status: 429,
-          headers: {
-            'X-RateLimit-Limit': String(usage.limit),
-            'X-RateLimit-Remaining': '0',
-            'X-Plan': plan,
-            'Retry-After': '3600',
-          },
-        }
-      );
-    }
+    // The plan is still tracked, it decides the label of the premium panel.
+    const plan = await getUserPlan(user.id);
 
     const {
       messages,
@@ -125,6 +110,75 @@ export async function POST(req: NextRequest) {
     } = parsed.data;
 
     const providerParam = provider === 'auto' ? undefined : (provider as ProviderId);
+
+    // 1. Model access: a model of a higher tier may not be used. The check
+    //    runs before the quota is counted, a rejected request is free.
+    const selectedModel = getModelById(model, providerParam);
+    if (selectedModel && !canAccessTier(role, selectedModel.minTier)) {
+      const required = tierLabel(selectedModel.minTier);
+
+      return NextResponse.json(
+        {
+          error: `Model ini membutuhkan ${required}. Upgrade akun kamu untuk mengaksesnya.`,
+          code: 'MODEL_TIER_REQUIRED',
+          upgradeRequired: true,
+          requiredTier: selectedModel.minTier,
+          requiredRole: roleForModel(selectedModel.minTier),
+          requiredLabel: required,
+          role,
+          tier,
+        },
+        { status: 403 }
+      );
+    }
+
+    // 2. Daily quota of the tier. Malformed requests are rejected before they
+    //    are counted.
+    const usage = await checkAndIncrementUsage(user.id, tierConfig.dailyRequestLimit);
+    if (!usage.allowed) {
+      const limitLabel = Number.isFinite(usage.limit)
+        ? `${usage.limit} request`
+        : 'tak terbatas';
+      const upgradeHint = isPremiumPlan(plan)
+        ? 'Coba lagi besok, kuota direset setiap pukul 00:00 UTC.'
+        : 'Upgrade ke tier yang lebih tinggi, atau coba lagi besok pukul 00:00 UTC.';
+
+      return NextResponse.json(
+        {
+          error: `Batas penggunaan harian paket ${tierConfig.name} (${limitLabel}) telah tercapai. ${upgradeHint}`,
+          code: 'PLAN_LIMIT_REACHED',
+          upgradeRequired: true,
+          role,
+          tier,
+          tierLabel: tierConfig.name,
+          plan,
+          planLabel: planFor(plan).label,
+          limit: Number.isFinite(usage.limit) ? usage.limit : null,
+          remaining: 0,
+          upgradeAvailable: !isPremiumPlan(plan),
+        },
+        {
+          status: 429,
+          headers: {
+            'X-RateLimit-Limit': Number.isFinite(usage.limit) ? String(usage.limit) : '0',
+            'X-RateLimit-Remaining': '0',
+            'X-Plan': plan,
+            'X-Role': role,
+            'X-Tier': String(tier),
+            'Retry-After': '3600',
+          },
+        }
+      );
+    }
+
+    // 3. The output of a single request is limited by the tier.
+    const effectiveMaxTokens = Math.min(
+      maxTokens ?? tierConfig.maxTokensPerRequest,
+      tierConfig.maxTokensPerRequest
+    );
+
+    // 4. The history that is sent to the model is limited by the tier.
+    const contextMessages = messages.slice(-tierConfig.maxContextMessages);
 
     // ---------------------------------------------------------------------
     // Skill library: discovery catalog + the personas pinned by the user
@@ -188,8 +242,8 @@ export async function POST(req: NextRequest) {
     }
 
     // Process incoming conversation messages & multimodal attachments
-    for (let i = 0; i < messages.length; i++) {
-      const msg = messages[i];
+    for (let i = 0; i < contextMessages.length; i++) {
+      const msg = contextMessages[i];
       const isLastUser = i === messages.length - 1 && msg.role === 'user';
 
       if (msg.attachments && msg.attachments.length > 0) {
@@ -235,7 +289,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const lastUserMsg = messages[messages.length - 1];
+    const lastUserMsg = contextMessages[contextMessages.length - 1];
     let liveSearchResults: any[] = [];
 
     // Execute real Web Search if enabled
@@ -345,7 +399,8 @@ export async function POST(req: NextRequest) {
               model,
               provider: providerParam,
               temperature,
-              maxTokens,
+              maxTokens: effectiveMaxTokens,
+              maxTier: tier,
               signal: req.signal,
               loadSkill: async (slug) => loadSkillContent(slug, user.id),
               onStepStart: (step, maxSteps) => {
@@ -450,7 +505,8 @@ export async function POST(req: NextRequest) {
                 model,
                 provider: providerParam,
                 temperature,
-                maxTokens,
+                maxTokens: effectiveMaxTokens,
+                maxTier: tier,
                 signal: req.signal,
               },
               async (chunk) => {
@@ -498,6 +554,10 @@ export async function POST(req: NextRequest) {
             await saveMessage(activeConvId, assistantMessageObj, user.id);
           }
 
+          // The role is tracked per request so the usage can be attributed
+          // to a tier. A failure here never breaks the answer.
+          await recordUsageRole(user.id, role);
+
           controller.enqueue(
             encoder.encode(
               `event: done\ndata: ${JSON.stringify({
@@ -534,9 +594,12 @@ export async function POST(req: NextRequest) {
         'Cache-Control': 'no-cache, no-transform',
         Connection: 'keep-alive',
         'X-Accel-Buffering': 'no',
-        'X-RateLimit-Limit': String(usage.limit),
-        'X-RateLimit-Remaining': String(usage.remaining),
+        'X-RateLimit-Limit': Number.isFinite(usage.limit) ? String(usage.limit) : '0',
+        'X-RateLimit-Remaining': Number.isFinite(usage.remaining) ? String(usage.remaining) : '0',
         'X-Plan': plan,
+        'X-Role': role,
+        'X-Tier': String(tier),
+        'X-Max-Tokens': String(effectiveMaxTokens),
       },
     });
   } catch (err: unknown) {

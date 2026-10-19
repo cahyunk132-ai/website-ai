@@ -68,6 +68,9 @@ export class RadoxAdapter implements ProviderAdapter {
                 inputPricePerMillion: 0.0,
                 outputPricePerMillion: 0.0,
                 isFreeQuotaEligible: true,
+                // A model that is not part of the verified registry is
+                // available for every tier.
+                minTier: 0,
                 fallbackModelId: 'intern-latest',
                 fallbackProvider: 'inkstone',
                 description: `Radox AI model ${mId} with free tier support.`,

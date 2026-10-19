@@ -8,22 +8,29 @@ interface QuotaMeterProps {
   limit: number;
   remaining: number;
   premium: boolean;
+  /** The tier of the account, e.g. "Premium 1". */
+  tierLabel?: string;
+  /** True when the account has no daily limit (admin). */
+  unlimited?: boolean;
   onClick?: () => void;
 }
 
 /**
- * Shows how many AI prompts are left today. The quota depends on the plan:
- * 5 prompts per day for a free account, 10x that for a premium one.
+ * Shows how many AI requests are left today. The quota depends on the tier
+ * of the account: 20 requests per day for a free account, up to 1000 for
+ * Premium 4 and no limit at all for an administrator.
  */
 export const QuotaMeter: React.FC<QuotaMeterProps> = ({
   used,
   limit,
   remaining,
   premium,
+  tierLabel,
+  unlimited = false,
   onClick,
 }) => {
   const percent = limit > 0 ? Math.min(100, Math.round((used / limit) * 100)) : 0;
-  const exhausted = remaining <= 0;
+  const exhausted = !unlimited && remaining <= 0;
 
   const barColor = exhausted
     ? 'bg-red-500'
@@ -46,9 +53,11 @@ export const QuotaMeter: React.FC<QuotaMeterProps> = ({
       type="button"
       onClick={onClick}
       title={
-        premium
-          ? `Premium: ${remaining} dari ${limit} prompt tersisa hari ini`
-          : `Paket gratis: ${remaining} dari ${limit} prompt tersisa hari ini. Klik untuk upgrade.`
+        unlimited
+          ? `Admin: ${used} request terpakai hari ini, tanpa batas harian`
+          : `${tierLabel ? tierLabel + ': ' : premium ? 'Premium: ' : 'Paket gratis: '}${remaining} dari ${limit} request tersisa hari ini${
+              premium ? '' : '. Klik untuk upgrade.'
+            }`
       }
       className={`flex items-center gap-1.5 shrink-0 px-2 py-1 rounded-lg border transition ${
         onClick ? 'hover:bg-slate-800/60 cursor-pointer' : 'cursor-default'
@@ -74,7 +83,7 @@ export const QuotaMeter: React.FC<QuotaMeterProps> = ({
         />
       </div>
       <span className={`text-[10px] tabular-nums ${textColor}`}>
-        {used}/{limit}
+        {used}/{unlimited ? '∞' : limit}
       </span>
     </button>
   );

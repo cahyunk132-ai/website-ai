@@ -12,8 +12,15 @@
  */
 
 import { createServerSupabaseAdminClient } from './supabase/server';
+import { TIER_CONFIGS, UserRole } from './ai/tiers';
 
 export type PlanId = 'free' | 'premium';
+
+/** The role a plan grants. */
+export const PLAN_ROLES: Record<PlanId, UserRole> = {
+  free: 'free',
+  premium: 'premium2',
+};
 
 export interface PlanDefinition {
   id: PlanId;
@@ -25,22 +32,21 @@ export interface PlanDefinition {
   features: string[];
 }
 
-function envLimit(name: string, fallback: number): number {
-  const configured = Number(process.env[name]);
-  return Number.isFinite(configured) && configured > 0 ? Math.floor(configured) : fallback;
-}
+/**
+ * The daily quota of a plan is the quota of the tier it grants, so there is
+ * only one place that decides how many requests an account may send:
+ * `src/lib/ai/tiers.ts` (tunable with the environment variables below).
+ */
+export const FREE_DAILY_PROMPT_LIMIT = TIER_CONFIGS.free.dailyRequestLimit;
 
-/** Prompt quota of a free account (default: 5 per day). */
-export const FREE_DAILY_PROMPT_LIMIT = envLimit('FREE_DAILY_PROMPT_LIMIT', 5);
+/** The premium plan grants the tier "premium2". */
+export const PREMIUM_DAILY_PROMPT_LIMIT = TIER_CONFIGS.premium2.dailyRequestLimit;
 
-/** How many times more a premium account may prompt (default: 10x). */
-export const PREMIUM_PROMPT_MULTIPLIER = envLimit('PREMIUM_PROMPT_MULTIPLIER', 10);
-
-/** Prompt quota of a premium account (default: 5 x 10 = 50 per day). */
-export const PREMIUM_DAILY_PROMPT_LIMIT = envLimit(
-  'PREMIUM_DAILY_PROMPT_LIMIT',
-  FREE_DAILY_PROMPT_LIMIT * PREMIUM_PROMPT_MULTIPLIER
-);
+/** How many times more a premium account may prompt than a free one. */
+export const PREMIUM_PROMPT_MULTIPLIER =
+  FREE_DAILY_PROMPT_LIMIT > 0
+    ? Math.round((PREMIUM_DAILY_PROMPT_LIMIT / FREE_DAILY_PROMPT_LIMIT) * 10) / 10
+    : 1;
 
 export const PLANS: Record<PlanId, PlanDefinition> = {
   free: {
@@ -50,7 +56,7 @@ export const PLANS: Record<PlanId, PlanDefinition> = {
     dailyPromptLimit: FREE_DAILY_PROMPT_LIMIT,
     priceLabel: 'Gratis',
     features: [
-      `${FREE_DAILY_PROMPT_LIMIT} prompt AI per hari`,
+      `${FREE_DAILY_PROMPT_LIMIT} request AI per hari`,
       'Seluruh model free tier (Radox & InkStone)',
       'Riwayat percakapan, folder, dan tag tersimpan',
       'AI Memory, Prompt Library, dan Command Palette',
@@ -63,8 +69,8 @@ export const PLANS: Record<PlanId, PlanDefinition> = {
     dailyPromptLimit: PREMIUM_DAILY_PROMPT_LIMIT,
     priceLabel: 'Rp 99.000 / bulan',
     features: [
-      `${PREMIUM_DAILY_PROMPT_LIMIT} prompt AI per hari (${PREMIUM_PROMPT_MULTIPLIER}x paket gratis)`,
-      'Model premium tanpa batas kuota harian',
+      `${PREMIUM_DAILY_PROMPT_LIMIT} request AI per hari (tier Premium 2)`,
+      'Semua model tier 0 - 2, termasuk model premium',
       'Konteks panjang, Agent Mode, dan tool keamanan',
       'Jadwal otomatis, export, dan bagikan percakapan',
       'Dukungan prioritas',
@@ -87,7 +93,8 @@ export function isPremiumPlan(id: string | null | undefined): boolean {
 }
 
 export function dailyLimitFor(id: string | null | undefined): number {
-  return planFor(id).dailyPromptLimit;
+  const role = isPlanId(id) ? PLAN_ROLES[id] : 'free';
+  return TIER_CONFIGS[role].dailyRequestLimit;
 }
 
 // ---------------------------------------------------------------------------

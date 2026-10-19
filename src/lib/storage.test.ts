@@ -304,17 +304,17 @@ describe('Storage layer (Supabase backed)', () => {
     expect(upserts[0].options.onConflict).toBe('user_id,date');
   });
 
-  it('uses the quota of the subscription plan when no limit is given', async () => {
+  it('uses the quota of the tier when no limit is given', async () => {
     mockState.client = createFakeClient({
       rpc: () => ({ data: 3, error: null }),
     });
 
-    // Without an explicit limit the plan of the account decides: a free
-    // account may send 5 prompts per day.
+    // Without an explicit limit the tier of the account decides: a free
+    // account may send 20 requests per day.
     const usage = await checkAndIncrementUsage('user-1');
 
-    expect(usage.limit).toBe(5);
-    expect(usage.remaining).toBe(2);
+    expect(usage.limit).toBe(20);
+    expect(usage.remaining).toBe(17);
   });
 
   it('searches conversations and messages in the database', async () => {

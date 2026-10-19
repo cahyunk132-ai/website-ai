@@ -14,6 +14,7 @@
 
 import { defaultRouter } from './router';
 import { ProviderId } from './types';
+import { Tier } from './tiers';
 import {
   AgentCall,
   AgentToolCall,
@@ -53,6 +54,8 @@ export interface AgentRunOptions {
   provider?: ProviderId;
   temperature?: number;
   maxTokens?: number;
+  /** The highest tier the account may reach (limits the fallback routes). */
+  maxTier?: Tier;
   systemPrompt?: string;
   signal?: AbortSignal;
   /** Maximum number of model steps (tool round trips). */
@@ -147,6 +150,7 @@ export async function runAgent(options: AgentRunOptions): Promise<AgentRunResult
         provider: options.provider,
         temperature: options.temperature,
         maxTokens: options.maxTokens,
+        maxTier: options.maxTier,
         signal: options.signal,
       },
       (chunk) => {
@@ -273,6 +277,7 @@ export async function runAgent(options: AgentRunOptions): Promise<AgentRunResult
           provider: options.provider,
           temperature: options.temperature,
           maxTokens: options.maxTokens,
+          maxTier: options.maxTier,
           signal: options.signal,
         },
         (chunk) => {

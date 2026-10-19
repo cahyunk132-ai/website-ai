@@ -1,15 +1,19 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import type { Tier, UserRole } from './ai/tiers';
 
 export interface UserSession {
   id: string;
   email: string;
   name: string;
-  role: 'admin' | 'user';
+  /** The role of the account (admin/free/premium1..premium4). */
+  role: UserRole;
+  /** The access level of the role: 0 = free, 1 - 4 = premium. */
+  tier: Tier;
   avatarUrl?: string;
   createdAt: string;
-  /** 'free' (5 prompt/hari) or 'premium' (10x kuota). */
+  /** 'free' or 'premium', the subscription of the account. */
   plan?: 'free' | 'premium';
 }
 
