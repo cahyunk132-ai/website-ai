@@ -163,6 +163,12 @@ Or via the Supabase CLI:
 supabase db push
 ```
 
+> **Note:** a single typo in a migration file aborts the whole script, so none of
+> the tables are created. `npm test` parses every migration and fails when a type
+> name is misspelled (`timestamp with time zone`, …), when a dollar quoted block is
+> not closed, or when the application queries a table or writes a column that the
+> migrations do not declare.
+
 The second migration adds:
 - `conversations.folder_id` / `system_prompt` / `temperature`
 - the persistent `conversation_folders` table (per-user folders)
@@ -174,6 +180,13 @@ presets) with RLS policies and an idempotent seed of the 12 built-in skills
 (code review, debugging, test authoring, API design, security audit, deep research,
 technical writing, SEO content, data analysis, SQL analyst, product spec and prompt
 engineering).
+
+The fourth migration adds the storage of the new features: the `user_memories` table
+(AI memory), `user_prompts` (prompt library), `conversation_shares` (public share
+links), `message_feedback` (thumbs up / down), `scheduled_runs` (cron) plus the
+`tags` and `deleted_at` columns on `conversations` (tags and trash). Every statement
+is idempotent (`if not exists` + a policy guard), so the file can safely be applied
+again.
 
 > **Note:** `SUPABASE_SERVICE_ROLE_KEY` is required for the folder persistence, the daily
 > quota accounting and the encrypted credential pool — those tables are restricted to the
