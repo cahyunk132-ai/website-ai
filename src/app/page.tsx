@@ -50,6 +50,7 @@ import {
   Moon,
   PanelLeftClose,
   PanelLeftOpen,
+  HardHat,
 } from 'lucide-react';
 import { Sidebar } from '@/components/Sidebar';
 import { ModelSelector } from '@/components/ModelSelector';
@@ -71,6 +72,7 @@ import { ShareModal } from '@/components/ShareModal';
 import { TrashModal } from '@/components/TrashModal';
 import { ContextMeter } from '@/components/ContextMeter';
 import { PremiumPanel } from '@/components/PremiumPanel';
+import { SixHatsPanel } from '@/components/SixHatsPanel';
 import { QuotaMeter } from '@/components/QuotaMeter';
 import { ChatMessage, ModelCapability, ProviderId, FileAttachment } from '@/lib/ai/types';
 import { ConversationSummary, FolderItem } from '@/lib/storage';
@@ -79,6 +81,10 @@ import { safeRandomUUID, safeCopyText } from '@/lib/safeUUID';
 import { useAndroidBackButton } from '@/lib/useAndroidBackButton';
 import { useAuth } from '@/lib/AuthContext';
 import { Tier, UserRole, getTierConfig, tierLabel as tierNameFor } from '@/lib/ai/tiers';
+import {
+  SIX_HATS_REQUIRED_LABEL,
+  canUseSixHats,
+} from '@/lib/ai/sixHats';
 import { AuthModal } from '@/components/AuthModal';
 import { computeContextUsage } from '@/lib/contextMeter';
 import {
@@ -121,6 +127,7 @@ export default function ChatPage() {
   const [isShareOpen, setIsShareOpen] = useState(false);
   const [isTrashOpen, setIsTrashOpen] = useState(false);
   const [isPaletteOpen, setIsPaletteOpen] = useState(false);
+  const [isSixHatsOpen, setIsSixHatsOpen] = useState(false);
   const [feedback, setFeedback] = useState<Record<string, 'up' | 'down'>>({});
   const [activeTag, setActiveTag] = useState<string | null>(null);
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
@@ -549,6 +556,12 @@ export default function ChatPage() {
    * selector.
    */
   const userTier: Tier = ((user?.tier ?? quota.tier ?? 0) as Tier) || 0;
+
+  /**
+   * Six Thinking Hats is reserved for Premium 3, Premium 4 and the
+   * administrator. A lower tier sees a locked button.
+   */
+  const sixHatsAllowed = canUseSixHats(user?.role ?? quota.role, userTier);
 
   /**
    * A model of a higher tier was clicked: the premium panel explains which
@@ -1386,6 +1399,23 @@ export default function ChatPage() {
         run: () => setIsSkillsOpen(true),
       },
       {
+        id: 'open-six-hats',
+        label: 'Buka Six Thinking Hats',
+        hint: sixHatsAllowed
+          ? 'Enam sudut pandang untuk satu topik'
+          : `Butuh ${SIX_HATS_REQUIRED_LABEL}`,
+        group: 'Tools',
+        icon: HardHat,
+        run: () => {
+          if (!sixHatsAllowed) {
+            setStatusToast(`Six Thinking Hats butuh ${SIX_HATS_REQUIRED_LABEL}.`);
+            setIsPremiumOpen(true);
+            return;
+          }
+          setIsSixHatsOpen(true);
+        },
+      },
+      {
         id: 'search',
         label: 'Cari percakapan',
         hint: 'Buka pencarian di riwayat',
@@ -1505,7 +1535,7 @@ export default function ChatPage() {
 
     return commands;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, theme, messages.length, conversations.length]);
+  }, [mode, theme, messages.length, conversations.length, sixHatsAllowed]);
 
   /**
    * The toolbar buttons. Every button keeps a visible label, they live in
@@ -1526,6 +1556,24 @@ export default function ChatPage() {
       title: 'Agent Skills & Personas',
       onClick: () => setIsSkillsOpen(true),
       badge: pinnedSkills.length,
+    },
+    {
+      id: 'sixhats',
+      label: 'Six Hats',
+      icon: HardHat,
+      iconClass: 'text-blue-400',
+      title: sixHatsAllowed
+        ? 'Six Thinking Hats - enam sudut pandang + kesimpulan'
+        : `Butuh ${SIX_HATS_REQUIRED_LABEL}`,
+      onClick: () => {
+        if (!sixHatsAllowed) {
+          setStatusToast(`Six Thinking Hats butuh ${SIX_HATS_REQUIRED_LABEL}.`);
+          setIsPremiumOpen(true);
+          return;
+        }
+        setIsSixHatsOpen(true);
+      },
+      locked: !sixHatsAllowed,
     },
     {
       id: 'tools',
@@ -1809,6 +1857,9 @@ export default function ChatPage() {
                 >
                   <Icon className={`w-3.5 h-3.5 ${action.iconClass} shrink-0`} />
                   <span className="hidden sm:inline font-medium">{action.label}</span>
+                  {action.locked ? (
+                    <Lock className="w-3 h-3 text-amber-400 shrink-0" />
+                  ) : null}
                   {action.badge ? (
                     <span className="text-[9px] font-mono px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/30 font-semibold">
                       {action.badge}
@@ -2409,6 +2460,29 @@ export default function ChatPage() {
         onChanged={fetchPinnedSkills}
       />
       <ToolsPanel isOpen={isToolsOpen} onClose={() => setIsToolsOpen(false)} />
+      <SixHatsPanel
+        isOpen={isSixHatsOpen}
+        onClose={() => setIsSixHatsOpen(false)}
+        model={selectedModelId}
+        provider={selectedProvider}
+        tier={userTier}
+        role={user?.role ?? quota.role}
+        conversationId={activeConvId}
+        onSaved={(conversationId) => {
+          if (!conversationId) return;
+          fetchConversations();
+          // A new conversation is opened right away so the analysis is
+          // immediately visible in the chat.
+          if (conversationId !== activeConvId) {
+            selectConversation(conversationId);
+          }
+          setStatusToast('Analisis Six Thinking Hats tersimpan di riwayat.');
+        }}
+        onUpgrade={() => {
+          setIsSixHatsOpen(false);
+          setIsPremiumOpen(true);
+        }}
+      />
       <MemoryPanel
         isOpen={isMemoryOpen}
         onClose={() => setIsMemoryOpen(false)}

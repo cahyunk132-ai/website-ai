@@ -59,6 +59,7 @@
 - **Agent Skills (Progressive Disclosure)**: A skill library stored in Supabase. The model only receives the *name + description* of every skill; the full body is loaded on demand the moment the agent decides to use it (`<skill_use skill="..."/>`). **28 built-in skills** ship with the platform (engineering, devops, data, writing, research, security, productivity, language) and users can browse, pin and author their own skills from the **Skills** panel.
 - **Preset Personas**: A pinned skill becomes a manual persona that is injected into every request (agent *and* standard chat mode).
 - **Autonomous Agent Loop**: In agent mode the model can call tools (`web_search`, `fetch_url`, `http_request`, `code_interpreter`, `calculator`, `datetime`) and load skills. Every result is fed back to the model, which continues with the next step until it produces the final answer. The UI shows the whole **Agent Execution Timeline**.
+- **Six Thinking Hats (Premium 3+)**: a dedicated panel that looks at one topic from six angles at once. Every hat is a separate AI request with its own system prompt: 🤍 White Hat (fakta & data), ❤️ Red Hat (emosi & intuisi), 🖤 Black Hat (risiko), 💛 Yellow Hat (peluang), 💚 Green Hat (ide kreatif) and 💙 Blue Hat (rangkuman + langkah selanjutnya). The first five run in parallel and stream into their card, the Blue Hat runs last and summarises the other five. The whole analysis costs **six requests** of the daily quota, is stored in the conversation history as one markdown message and can be copied or regenerated. The feature is reserved for **Premium 3, Premium 4 and the administrator**: a lower tier sees the button locked with a "Butuh Premium 3" tooltip.
 - **AI Memory (Cross Conversation Memory)**: the assistant remembers the facts you ask it to keep (your name, your stack, your preferred style). Memories are extracted automatically from explicit statements, can be added with `/remember <fact>` and removed with `/forget <fact>`, and are injected into the system prompt of every following conversation. A dedicated panel lists them, with an on/off switch per entry.
 - **Command Palette (Ctrl/Cmd + K)**: a searchable palette with the most common actions (new chat, switch to agent mode, open the tools, the skills, the memory, the schedules, the trash, share, export, theme, notifications) and a **Prompt Library** with eight built-in templates plus your own, saved directly from the composer.
 - **Scheduled Runs (cron)**: background prompts that run on their own schedule (`0 9 * * *`, `0 8 * * 1-5`, ...). Each run is stored as a new conversation, and the panel shows the next run, the last result and a **Run now** button. On a serverless platform the schedules are evaluated by the client while the app is open.
@@ -269,6 +270,7 @@ website-ai/
 │   │   │   ├── folders/               # Persistent per-user folder endpoints
 │   │   │   ├── skills/                # Skill library endpoints (list/create/pin)
 │   │   │   ├── tools/run/route.ts     # Manual runner for the security & utility tools
+│   │   │   ├── six-hats/route.ts      # Six Thinking Hats (6 AI requests, Premium 3+)
 │   │   │   ├── memories/route.ts      # AI memory (CRUD)
 │   │   │   ├── prompts/route.ts       # Prompt library (CRUD)
 │   │   │   ├── schedules/route.ts     # Scheduled runs (CRUD)
@@ -292,6 +294,7 @@ website-ai/
 │   │   ├── SettingsModal.tsx          # API key encryption modal
 │   │   ├── SkillsModal.tsx            # Skill library: browse, pin, author
 │   │   ├── ToolsPanel.tsx             # Manual runner for the 11 new tools
+│   │   ├── SixHatsPanel.tsx           # Six Thinking Hats: 6 streaming cards + summary
 │   │   ├── CommandPalette.tsx         # Ctrl/Cmd+K palette + prompt library
 │   │   ├── MemoryPanel.tsx            # AI memory management
 │   │   ├── SchedulesPanel.tsx         # Cron schedules
@@ -313,6 +316,7 @@ website-ai/
 │       │   ├── errors.ts              # Normalized error classes
 │       │   ├── models.ts              # Model capability registry (with minTier)
 │       │   ├── tiers.ts               # Role & tier definitions (quota, tokens, context)
+│       │   ├── sixHats.ts             # Six Thinking Hats: the six hats & the markdown
 │       │   ├── usage.ts               # Token estimation & metrics
 │       │   ├── router.ts              # Fallback router engine
 │       │   ├── tools.ts               # Agent tool registry & sandboxed executors
