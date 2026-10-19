@@ -12,8 +12,11 @@ export const metadata: Metadata = {
   },
   manifest: '/manifest.webmanifest',
   icons: {
-    icon: '/icon-192.png',
-    apple: '/icon-192.png',
+    icon: [
+      { url: '/icon-192.png', sizes: '192x192', type: 'image/png' },
+      { url: '/icon-512.png', sizes: '512x512', type: 'image/png' },
+    ],
+    apple: '/apple-icon-180.png',
   },
 };
 
@@ -24,6 +27,10 @@ export const viewport: Viewport = {
   userScalable: false,
   viewportFit: 'cover',
   themeColor: '#020617',
+  // Android Chrome resizes the *visual* viewport when the soft keyboard opens,
+  // which hides the composer behind the keyboard. `resizes-content` shrinks the
+  // layout viewport instead, so the input stays right above the keyboard.
+  interactiveWidget: 'resizes-content',
 };
 
 import { AuthProvider } from '@/lib/AuthContext';
@@ -58,7 +65,7 @@ export default function RootLayout({
           }}
         />
       </head>
-      <body className="h-full min-h-[100dvh] bg-slate-950 text-slate-100 antialiased overflow-hidden selection:bg-cyan-500/20 selection:text-cyan-200">
+      <body className="h-full bg-slate-950 text-slate-100 antialiased overflow-hidden overscroll-none selection:bg-cyan-500/20 selection:text-cyan-200">
         <AuthProvider>
           {children}
         </AuthProvider>

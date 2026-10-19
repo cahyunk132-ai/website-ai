@@ -53,7 +53,7 @@ export const ConversationSettingsModal: React.FC<ConversationSettingsModalProps>
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/70 backdrop-blur-sm animate-fadeIn">
-      <div className="relative w-full max-w-lg rounded-2xl bg-slate-950 border border-slate-800 shadow-2xl overflow-hidden text-slate-100 flex flex-col">
+      <div className="relative w-full max-w-lg rounded-2xl bg-slate-950 border border-slate-800 shadow-2xl overflow-hidden text-slate-100 flex flex-col pb-safe">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-800 bg-slate-900/90 shrink-0">
           <div className="flex items-center gap-2.5">
@@ -76,7 +76,7 @@ export const ConversationSettingsModal: React.FC<ConversationSettingsModalProps>
         </div>
 
         {/* Content */}
-        <div className="p-5 space-y-4 max-h-[75vh] overflow-y-auto">
+        <div className="p-5 space-y-4 max-h-[75dvh] overflow-y-auto">
           {/* Conversation Title */}
           <div className="space-y-1.5">
             <label className="text-xs font-semibold text-slate-300">Conversation Title</label>
@@ -84,7 +84,7 @@ export const ConversationSettingsModal: React.FC<ConversationSettingsModalProps>
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              className="w-full px-3.5 py-2 rounded-xl bg-slate-900 border border-slate-800 text-xs text-slate-100 focus:outline-none focus:border-cyan-500"
+              className="w-full px-3.5 py-2 rounded-xl bg-slate-900 border border-slate-800 text-base sm:text-xs text-slate-100 focus:outline-none focus:border-cyan-500"
             />
           </div>
 
@@ -97,7 +97,7 @@ export const ConversationSettingsModal: React.FC<ConversationSettingsModalProps>
             <select
               value={folderId || ''}
               onChange={(e) => setFolderId(e.target.value || null)}
-              className="w-full px-3.5 py-2 rounded-xl bg-slate-900 border border-slate-800 text-xs text-slate-100 focus:outline-none focus:border-cyan-500 cursor-pointer"
+              className="w-full px-3.5 py-2 rounded-xl bg-slate-900 border border-slate-800 text-base sm:text-xs text-slate-100 focus:outline-none focus:border-cyan-500 cursor-pointer"
             >
               <option value="">(No Folder / Ungrouped)</option>
               {folders.map((f) => (
@@ -119,7 +119,7 @@ export const ConversationSettingsModal: React.FC<ConversationSettingsModalProps>
               value={systemPrompt}
               onChange={(e) => setSystemPrompt(e.target.value)}
               placeholder="e.g. You are a senior software architect..."
-              className="w-full p-3 rounded-xl bg-slate-900 border border-slate-800 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyan-500 leading-relaxed font-sans"
+              className="w-full p-3 rounded-xl bg-slate-900 border border-slate-800 text-base sm:text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyan-500 leading-relaxed font-sans"
             />
           </div>
         </div>

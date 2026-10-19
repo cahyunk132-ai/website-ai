@@ -32,7 +32,7 @@ export const KeyboardShortcutsModal: React.FC<KeyboardShortcutsModalProps> = ({ 
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/70 backdrop-blur-sm animate-fadeIn">
-      <div className="relative w-full max-w-lg rounded-2xl bg-slate-950 border border-slate-800 shadow-2xl overflow-hidden text-slate-100 flex flex-col">
+      <div className="relative w-full max-w-lg rounded-2xl bg-slate-950 border border-slate-800 shadow-2xl overflow-hidden text-slate-100 flex flex-col pb-safe">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-800 bg-slate-900/90 shrink-0">
           <div className="flex items-center gap-2.5">
@@ -53,7 +53,7 @@ export const KeyboardShortcutsModal: React.FC<KeyboardShortcutsModalProps> = ({ 
         </div>
 
         {/* Shortcuts List */}
-        <div className="p-5 space-y-4 max-h-[75vh] overflow-y-auto">
+        <div className="p-5 space-y-4 max-h-[75dvh] overflow-y-auto">
           {categories.map((cat) => (
             <div key={cat} className="space-y-2">
               <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">{cat}</h3>

@@ -85,7 +85,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
             className="fixed inset-0 z-40 bg-black/60 sm:hidden"
             onClick={() => setIsOpen(false)}
           />
-          <div className="fixed sm:absolute inset-x-2 sm:inset-x-auto sm:left-0 top-14 sm:top-auto sm:mt-2 sm:w-[420px] max-h-[82vh] sm:max-h-[34rem] rounded-2xl bg-slate-950 border border-slate-700/80 shadow-2xl shadow-black/90 z-50 flex flex-col overflow-hidden animate-fadeIn">
+          <div className="fixed sm:absolute inset-x-2 sm:inset-x-auto sm:left-0 top-safe-header sm:top-auto sm:mt-2 sm:w-[420px] max-h-[82dvh] sm:max-h-[34rem] rounded-2xl bg-slate-950 border border-slate-700/80 shadow-2xl shadow-black/90 z-50 flex flex-col overflow-hidden animate-fadeIn">
             {/* Header Controls: Free Tier Toggle & Provider Filters */}
             <div className="p-3 border-b border-slate-800 bg-slate-900 space-y-2.5 shrink-0">
               {/* Free Tier Filter Switch */}
@@ -153,7 +153,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
                   placeholder="Search by model name or capability..."
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full pl-9 pr-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500"
+                  className="w-full pl-9 pr-3 py-1.5 rounded-xl bg-slate-950 border border-slate-800 text-base sm:text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500"
                 />
               </div>
             </div>
