@@ -43,7 +43,7 @@ describe('header toolbar layout', () => {
     expect(page).not.toMatch(/headerOverflowItems/);
   });
 
-  it('shows all ten toolbar actions', () => {
+  it('shows all eleven toolbar actions', () => {
     const actions = [
       'Agent Skills & Personas',
       'Tool Runner - jalankan tool langsung',
@@ -65,6 +65,13 @@ describe('header toolbar layout', () => {
       expect(block).toContain(`title: '${title}'`);
     }
     expect(headerMarkup).toContain('title={action.title}');
+
+    // Six Thinking Hats has a dynamic tooltip: the locked state explains the
+    // tier that is needed, the unlocked state describes the feature.
+    expect(block).toContain("id: 'sixhats'");
+    expect(block).toContain("label: 'Six Hats'");
+    expect(block).toContain('Six Thinking Hats - enam sudut pandang + kesimpulan');
+    expect(block).toContain('Butuh ${SIX_HATS_REQUIRED_LABEL}');
   });
 
   it('keeps the secondary actions in the command palette as well', () => {
@@ -83,6 +90,7 @@ describe('header toolbar layout', () => {
     const labels = [...block.matchAll(/label: '([^']+)'/g)].map((m) => m[1]);
     expect(labels).toEqual([
       'Skills',
+      'Six Hats',
       'Tools',
       'Palette',
       'Memory',
