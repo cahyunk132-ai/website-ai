@@ -2,6 +2,8 @@
  * Hyunk AI Hub - Core AI Types & Definitions
  */
 
+import type { Tier } from './tiers';
+
 export type ProviderId = 'radox' | 'inkstone';
 
 export interface FileAttachment {
@@ -41,6 +43,10 @@ export interface ModelCapability {
   inputPricePerMillion: number;
   outputPricePerMillion: number;
   isFreeQuotaEligible: boolean;
+  /**
+   * The lowest tier that may use this model (0 = free, 4 = flagship).
+   */
+  minTier: Tier;
   fallbackModelId?: string;
   fallbackProvider?: ProviderId;
   description?: string;
@@ -62,6 +68,11 @@ export interface ChatOptions {
   webSearch?: boolean;
   stream?: boolean;
   signal?: AbortSignal;
+  /**
+   * The highest tier the caller may reach. The router never falls back to a
+   * model that requires a higher tier than this one.
+   */
+  maxTier?: Tier;
 }
 
 export interface ChatStreamChunk {

@@ -78,6 +78,7 @@ import { AgentStepView, AgentSkillView } from '@/lib/ai/agentEvents';
 import { safeRandomUUID, safeCopyText } from '@/lib/safeUUID';
 import { useAndroidBackButton } from '@/lib/useAndroidBackButton';
 import { useAuth } from '@/lib/AuthContext';
+import { Tier, UserRole, getTierConfig, tierLabel as tierNameFor } from '@/lib/ai/tiers';
 import { AuthModal } from '@/components/AuthModal';
 import { computeContextUsage } from '@/lib/contextMeter';
 import {
@@ -96,7 +97,8 @@ export default function ChatPage() {
   const [isStreaming, setIsStreaming] = useState(false);
   const [mode, setMode] = useState<'chat' | 'agent'>('chat');
   const [models, setModels] = useState<ModelCapability[]>([]);
-  const [selectedModelId, setSelectedModelId] = useState<string>('gpt-5.6-luna');
+  // The default model of a free account: a model of tier 0.
+  const [selectedModelId, setSelectedModelId] = useState<string>('gemma-2-2b');
   const [selectedProvider, setSelectedProvider] = useState<'auto' | ProviderId>('auto');
 
   // Parameters & Tools
@@ -138,9 +140,14 @@ export default function ChatPage() {
   const [quota, setQuota] = useState({
     plan: 'free' as 'free' | 'premium',
     used: 0,
-    limit: 5,
-    remaining: 5,
+    limit: 20,
+    remaining: 20,
     premium: false,
+    role: 'free' as UserRole,
+    tier: 0 as Tier,
+    tierLabel: 'Free',
+    tierBadge: '\u{1F193}',
+    unlimited: false,
   });
   const [isConvSettingsOpen, setIsConvSettingsOpen] = useState(false);
   const [convToEdit, setConvToEdit] = useState<ConversationSummary | null>(null);
@@ -295,7 +302,18 @@ export default function ChatPage() {
    */
   const refreshQuota = useCallback(async () => {
     if (!user) {
-      setQuota({ plan: 'free', used: 0, limit: 5, remaining: 5, premium: false });
+      setQuota({
+        plan: 'free',
+        used: 0,
+        limit: 20,
+        remaining: 20,
+        premium: false,
+        role: 'free',
+        tier: 0,
+        tierLabel: 'Free',
+        tierBadge: '\u{1F193}',
+        unlimited: false,
+      });
       return;
     }
     try {
@@ -305,9 +323,14 @@ export default function ChatPage() {
       setQuota({
         plan: data.plan === 'premium' ? 'premium' : 'free',
         used: data.used ?? 0,
-        limit: data.limit ?? 5,
+        limit: data.limit ?? (data.unlimited ? 0 : 20),
         remaining: data.remaining ?? 0,
         premium: !!data.premium,
+        role: data.role ?? 'free',
+        tier: data.tier ?? 0,
+        tierLabel: data.tierLabel ?? 'Free',
+        tierBadge: data.tierBadge ?? '\u{1F193}',
+        unlimited: !!data.unlimited,
       });
     } catch {
       // The meter keeps its last known state when the server is unreachable.
@@ -520,6 +543,37 @@ export default function ChatPage() {
       setNotificationsEnabled(true);
     }
   }, []);
+
+  /**
+   * The tier of the account. Models of a higher tier are locked in the model
+   * selector.
+   */
+  const userTier: Tier = ((user?.tier ?? quota.tier ?? 0) as Tier) || 0;
+
+  /**
+   * A model of a higher tier was clicked: the premium panel explains which
+   * tier is needed.
+   */
+  const handleLockedModel = (model: { name: string; minTier: number }) => {
+    setErrorMessage(
+      `Model ${model.name} membutuhkan ${tierNameFor(model.minTier)}. Upgrade akun kamu untuk mengaksesnya.`
+    );
+    setIsPremiumOpen(true);
+  };
+
+  /**
+   * The selected model must always be accessible for the tier of the account.
+   * A model of a higher tier is locked in the model selector.
+   */
+  useEffect(() => {
+    if (!models.length) return;
+    setSelectedModelId((prev) => {
+      const current = models.find((m) => m.id === prev);
+      if (current && (current.minTier ?? 0) <= userTier) return prev;
+      const accessible = models.find((m) => (m.minTier ?? 0) <= userTier);
+      return accessible ? accessible.id : prev;
+    });
+  }, [models, userTier]);
 
   // Load models catalog
   const fetchModels = async () => {
@@ -994,6 +1048,14 @@ export default function ChatPage() {
           setIsPremiumOpen(true);
           refreshQuota();
           throw new Error(errorJson.error || 'Kuota prompt harian sudah habis.');
+        }
+
+        // The model needs a higher tier than the account has: the premium
+        // panel is opened right away so the user can upgrade.
+        if (response.status === 403 && errorJson.code === 'MODEL_TIER_REQUIRED') {
+          setErrorMessage(errorJson.error || 'Model ini membutuhkan tier lebih tinggi.');
+          setIsPremiumOpen(true);
+          throw new Error(errorJson.error || 'Model ini membutuhkan tier lebih tinggi.');
         }
 
         throw new Error(errorJson.error || `HTTP ${response.status}`);
@@ -1630,6 +1692,8 @@ export default function ChatPage() {
               selectedProvider={selectedProvider}
               onSelectModel={setSelectedModelId}
               onSelectProvider={setSelectedProvider}
+              userTier={userTier}
+              onLockedModel={handleLockedModel}
             />
 
             {/* Parameter Controls Tuning Button */}
@@ -1702,9 +1766,17 @@ export default function ChatPage() {
                 <div className="w-5 h-5 rounded-md bg-gradient-to-tr from-cyan-600 to-blue-600 flex items-center justify-center text-white font-bold text-[10px] shadow-sm">
                   {(user.name || user.email).charAt(0).toUpperCase()}
                 </div>
-                {quota.premium && (
+                {quota.premium && !quota.unlimited && (
                   <Crown className="w-3.5 h-3.5 text-amber-400 shrink-0" />
                 )}
+                {/* The tier of the account, e.g. "Premium 1" */}
+                <span
+                  className="hidden md:inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full border border-amber-500/40 bg-amber-500/10 text-amber-300 font-semibold shrink-0"
+                  title={`Tier ${quota.tier} - ${quota.tierLabel}. Batas ${quota.unlimited ? 'tak terbatas' : quota.limit} request per hari.`}
+                >
+                  <span aria-hidden>{quota.tierBadge}</span>
+                  {quota.tierLabel}
+                </span>
                 <span className="hidden sm:inline font-medium max-w-[80px] truncate">{user.name}</span>
               </button>
             ) : (
@@ -2132,6 +2204,8 @@ export default function ChatPage() {
                   limit={quota.limit}
                   remaining={quota.remaining}
                   premium={quota.premium}
+                  tierLabel={quota.tierLabel}
+                  unlimited={quota.unlimited}
                   onClick={() => setIsPremiumOpen(true)}
                 />
                 <div className="hidden sm:flex items-center gap-3">
@@ -2289,10 +2363,16 @@ export default function ChatPage() {
         limit={quota.limit}
         remaining={quota.remaining}
         isAdmin={user?.role === 'admin'}
+        role={quota.role}
+        tier={quota.tier}
+        tierLabel={quota.tierLabel}
+        tierBadge={quota.tierBadge}
+        unlimited={quota.unlimited}
         onPlanChanged={(nextPlan) => {
           setQuota((prev) => ({ ...prev, plan: nextPlan, premium: nextPlan === 'premium' }));
           refreshQuota();
         }}
+        onRoleChanged={refreshQuota}
       />
       <ConversationSettingsModal
         isOpen={isConvSettingsOpen}

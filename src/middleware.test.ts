@@ -7,8 +7,9 @@ const user = {
   id: 'user-1',
   email: 'demo@hyunkai.com',
   name: 'Demo User',
-  role: 'user' as const,
+  role: 'free' as const,
   createdAt: '2026-10-18T00:00:00.000Z',
+  tier: 0 as const,
 };
 
 function buildRequest(pathname: string, token?: string): NextRequest {

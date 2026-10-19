@@ -68,9 +68,12 @@ describe('/api/premium', () => {
     const data = await res.json();
     expect(data.plan).toBe('free');
     expect(data.premium).toBe(false);
-    expect(data.limit).toBe(5);
-    expect(data.plans.premium.dailyPromptLimit).toBe(50);
-    expect(data.plans.free.dailyPromptLimit).toBe(5);
+    // The quota of the tier (free = tier 0).
+    expect(data.limit).toBe(20);
+    expect(data.role).toBe('free');
+    expect(data.tier).toBe(0);
+    expect(data.plans.premium.dailyPromptLimit).toBe(200);
+    expect(data.plans.free.dailyPromptLimit).toBe(20);
   });
 
   it('activates the premium plan', async () => {
@@ -83,12 +86,16 @@ describe('/api/premium', () => {
     expect(data.ok).toBe(true);
     expect(data.plan).toBe('premium');
     expect(data.premium).toBe(true);
-    expect(data.limit).toBe(50);
+    // The premium plan grants the tier "premium2".
+    expect(data.role).toBe('premium2');
+    expect(data.tier).toBe(2);
+    expect(data.limit).toBe(200);
 
     // The plan is now active for the account.
     const after = await (await GET(buildRequest(undefined, 'GET'))).json();
     expect(after.plan).toBe('premium');
-    expect(after.limit).toBe(50);
+    expect(after.role).toBe('premium2');
+    expect(after.limit).toBe(200);
   });
 
   it('deactivates the premium plan again', async () => {

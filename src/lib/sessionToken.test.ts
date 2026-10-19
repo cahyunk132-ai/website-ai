@@ -10,7 +10,8 @@ const baseUser = {
   id: 'user-1',
   email: 'demo@hyunkai.com',
   name: 'Demo User',
-  role: 'user' as const,
+  role: 'free' as const,
+  tier: 0 as const,
   createdAt: '2026-10-18T00:00:00.000Z',
 };
 
@@ -26,13 +27,15 @@ describe('Session token (edge runtime safe)', () => {
     expect(user).not.toBeNull();
     expect(user?.id).toBe('user-1');
     expect(user?.email).toBe('demo@hyunkai.com');
-    expect(user?.role).toBe('user');
+    expect(user?.role).toBe('free');
+    expect(user?.tier).toBe(0);
   });
 
   it('keeps the admin role', async () => {
-    const token = await createSessionToken({ ...baseUser, role: 'admin' });
+    const token = await createSessionToken({ ...baseUser, role: 'admin', tier: 4 });
     const user = await verifySessionToken(token);
     expect(user?.role).toBe('admin');
+    expect(user?.tier).toBe(4);
   });
 
   it('rejects a tampered payload', async () => {

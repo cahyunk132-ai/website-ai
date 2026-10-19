@@ -12,12 +12,18 @@ const quotaState = vi.hoisted(() => ({
   plan: 'free' as 'free' | 'premium',
   allowed: true,
   remaining: 4,
-  limit: 5,
+  limit: 20,
+  /** The role of the account, the tier is derived from it. */
+  role: 'free' as string,
 }));
+
+/** The options of the last call to the router (used to check the limits). */
+const routerCalls = vi.hoisted(() => [] as any[]);
 
 vi.mock('@/lib/ai/router', () => ({
   defaultRouter: {
-    streamChat: async (_options: any, onChunk: (chunk: any) => void) => {
+    streamChat: async (options: any, onChunk: (chunk: any) => void) => {
+      routerCalls.push(options);
       const text = scriptedAnswers.shift() ?? '';
       onChunk({ text, done: false });
       onChunk({
@@ -52,6 +58,12 @@ vi.mock('@/lib/storage', () => ({
     tokensUsed: 0,
     date: '2026-10-19',
   }),
+  recordUsageRole: async () => undefined,
+}));
+
+vi.mock('@/lib/roles', () => ({
+  getEffectiveRole: vi.fn(async () => quotaState.role),
+  clearRoleCache: vi.fn(),
 }));
 
 vi.mock('@/lib/plans', () => ({
@@ -128,7 +140,9 @@ describe('POST /api/chat (agent mode)', () => {
     quotaState.plan = 'free';
     quotaState.allowed = true;
     quotaState.remaining = 4;
-    quotaState.limit = 5;
+    quotaState.limit = 20;
+    quotaState.role = 'free';
+    routerCalls.length = 0;
   });
 
   it('rejects an unauthenticated request', async () => {
@@ -200,9 +214,10 @@ describe('POST /api/chat (agent mode)', () => {
     expect(done.data.activatedSkills).toEqual([{ slug: 'code-review', name: 'Code Review' }]);
   });
 
-  it('enforces the free plan quota of five prompts per day', async () => {
+  it('enforces the free tier quota of twenty requests per day', async () => {
     quotaState.plan = 'free';
-    quotaState.limit = 5;
+    quotaState.role = 'free';
+    quotaState.limit = 20;
     quotaState.allowed = false;
     quotaState.remaining = 0;
 
@@ -215,22 +230,26 @@ describe('POST /api/chat (agent mode)', () => {
     );
 
     expect(res.status).toBe(429);
-    expect(res.headers.get('X-RateLimit-Limit')).toBe('5');
+    expect(res.headers.get('X-RateLimit-Limit')).toBe('20');
     expect(res.headers.get('X-Plan')).toBe('free');
+    expect(res.headers.get('X-Tier')).toBe('0');
 
     const data = await res.json();
     expect(data.code).toBe('PLAN_LIMIT_REACHED');
     expect(data.plan).toBe('free');
-    expect(data.limit).toBe(5);
+    expect(data.limit).toBe(20);
     expect(data.remaining).toBe(0);
     expect(data.upgradeAvailable).toBe(true);
-    expect(data.error).toContain('5 prompt');
-    expect(data.error).toContain('Premium');
+    expect(data.role).toBe('free');
+    expect(data.tier).toBe(0);
+    expect(data.error).toContain('20 request');
+    expect(data.error).toContain('Free');
   });
 
-  it('enforces the ten times bigger premium quota', async () => {
+  it('enforces the bigger premium tier quota', async () => {
     quotaState.plan = 'premium';
-    quotaState.limit = 50;
+    quotaState.role = 'premium2';
+    quotaState.limit = 200;
     quotaState.allowed = false;
     quotaState.remaining = 0;
 
@@ -243,13 +262,16 @@ describe('POST /api/chat (agent mode)', () => {
     );
 
     expect(res.status).toBe(429);
-    expect(res.headers.get('X-RateLimit-Limit')).toBe('50');
+    expect(res.headers.get('X-RateLimit-Limit')).toBe('200');
     expect(res.headers.get('X-Plan')).toBe('premium');
+    expect(res.headers.get('X-Tier')).toBe('2');
 
     const data = await res.json();
     expect(data.code).toBe('PLAN_LIMIT_REACHED');
     expect(data.plan).toBe('premium');
-    expect(data.limit).toBe(50);
+    expect(data.limit).toBe(200);
+    expect(data.role).toBe('premium2');
+    expect(data.tier).toBe(2);
     // A premium account cannot upgrade any further.
     expect(data.upgradeAvailable).toBe(false);
   });
@@ -267,8 +289,10 @@ describe('POST /api/chat (agent mode)', () => {
 
     expect(res.status).toBe(200);
     expect(res.headers.get('X-Plan')).toBe('free');
-    expect(res.headers.get('X-RateLimit-Limit')).toBe('5');
+    expect(res.headers.get('X-RateLimit-Limit')).toBe('20');
     expect(res.headers.get('X-RateLimit-Remaining')).toBe('4');
+    expect(res.headers.get('X-Role')).toBe('free');
+    expect(res.headers.get('X-Tier')).toBe('0');
   });
 
   it('keeps the plain chat mode working', async () => {
@@ -290,5 +314,117 @@ describe('POST /api/chat (agent mode)', () => {
 
     expect(text).toContain('Halo, apa kabar?');
     expect(events.map((e) => e.event)).not.toContain('agent_step_start');
+  });
+  it('refuses a model of a higher tier', async () => {
+    quotaState.role = 'free';
+
+    const res = await POST(
+      buildRequest({
+        messages: [{ role: 'user', content: 'halo' }],
+        model: 'claude-opus-5.5',
+        mode: 'chat',
+      })
+    );
+
+    expect(res.status).toBe(403);
+
+    const data = await res.json();
+    expect(data.code).toBe('MODEL_TIER_REQUIRED');
+    expect(data.upgradeRequired).toBe(true);
+    expect(data.requiredTier).toBe(4);
+    expect(data.requiredLabel).toBe('Premium 4');
+    expect(data.role).toBe('free');
+    expect(data.error).toContain('Premium 4');
+  });
+
+  it('lets a premium account use the model of its tier', async () => {
+    quotaState.role = 'premium4';
+    scriptedAnswers.push('Halo!');
+
+    const res = await POST(
+      buildRequest({
+        messages: [{ role: 'user', content: 'halo' }],
+        model: 'claude-opus-5.5',
+        mode: 'chat',
+      })
+    );
+
+    expect(res.status).toBe(200);
+  });
+
+  it('gives the administrator access to every model', async () => {
+    quotaState.role = 'admin';
+    scriptedAnswers.push('Halo!');
+
+    const res = await POST(
+      buildRequest({
+        messages: [{ role: 'user', content: 'halo' }],
+        model: 'claude-opus-5.5',
+        mode: 'chat',
+      })
+    );
+
+    expect(res.status).toBe(200);
+  });
+
+  it('limits the answer length to the tier of the account', async () => {
+    quotaState.role = 'free';
+    scriptedAnswers.push('Halo!');
+
+    await POST(
+      buildRequest({
+        messages: [{ role: 'user', content: 'halo' }],
+        model: 'gemma-2-2b',
+        maxTokens: 32000,
+        mode: 'chat',
+      })
+    );
+
+    // The free tier allows 2048 output tokens.
+    expect(routerCalls.at(-1)?.maxTokens).toBe(2048);
+    expect(routerCalls.at(-1)?.maxTier).toBe(0);
+  });
+
+  it('limits the history to the tier of the account', async () => {
+    quotaState.role = 'free';
+    scriptedAnswers.push('Halo!');
+
+    const history = Array.from({ length: 15 }, (_, i) => ({
+      role: i % 2 === 0 ? 'user' : 'assistant',
+      content: `pesan ${i}`,
+    }));
+
+    await POST(
+      buildRequest({
+        messages: history,
+        model: 'gemma-2-2b',
+        mode: 'chat',
+      })
+    );
+
+    // The free tier sends the last 10 messages of the history.
+    expect(routerCalls.at(-1)?.messages).toHaveLength(10);
+  });
+
+  it('keeps the whole history for a premium tier', async () => {
+    quotaState.role = 'premium3';
+    scriptedAnswers.push('Halo!');
+
+    const history = Array.from({ length: 15 }, (_, i) => ({
+      role: i % 2 === 0 ? 'user' : 'assistant',
+      content: `pesan ${i}`,
+    }));
+
+    await POST(
+      buildRequest({
+        messages: history,
+        model: 'gemma-2-2b',
+        mode: 'chat',
+      })
+    );
+
+    expect(routerCalls.at(-1)?.messages).toHaveLength(15);
+    expect(routerCalls.at(-1)?.maxTokens).toBe(16000);
+    expect(routerCalls.at(-1)?.maxTier).toBe(3);
   });
 });

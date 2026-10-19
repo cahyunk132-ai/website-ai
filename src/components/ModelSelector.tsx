@@ -1,8 +1,9 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
-import { ChevronDown, Sparkles, Check, Search, Zap, ShieldCheck } from 'lucide-react';
+import { ChevronDown, Sparkles, Check, Search, Zap, ShieldCheck, Lock } from 'lucide-react';
 import { ModelCapability, ProviderId } from '@/lib/ai/types';
+import { Tier, tierLabel } from '@/lib/ai/tiers';
 
 interface ModelSelectorProps {
   models: ModelCapability[];
@@ -10,6 +11,10 @@ interface ModelSelectorProps {
   selectedProvider: 'auto' | ProviderId;
   onSelectModel: (modelId: string) => void;
   onSelectProvider: (provider: 'auto' | ProviderId) => void;
+  /** The tier of the account: models of a higher tier are locked. */
+  userTier?: Tier;
+  /** Called when a locked model is clicked. */
+  onLockedModel?: (model: ModelCapability) => void;
 }
 
 export const ModelSelector: React.FC<ModelSelectorProps> = ({
@@ -18,6 +23,8 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
   selectedProvider,
   onSelectModel,
   onSelectProvider,
+  userTier = 4,
+  onLockedModel,
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [freeOnly, setFreeOnly] = useState(true);
@@ -42,6 +49,8 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  const isLocked = (model: ModelCapability) => (model.minTier ?? 0) > userTier;
 
   const filteredModels = models.filter((m) => {
     const matchesProvider = selectedProvider === 'auto' || m.provider === selectedProvider;
@@ -177,18 +186,32 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
                   const isSelected =
                     model.id === selectedModelId &&
                     (selectedProvider === 'auto' || model.provider === selectedProvider);
+                  const locked = isLocked(model);
                   return (
                     <div
                       key={`${model.provider}-${model.id}`}
                       onClick={() => {
+                        if (locked) {
+                          onLockedModel?.(model);
+                          return;
+                        }
                         onSelectModel(model.id);
                         onSelectProvider(model.provider);
                         setIsOpen(false);
                       }}
-                      className={`p-3 rounded-xl cursor-pointer transition border text-left ${
-                        isSelected
-                          ? 'bg-slate-900 border-cyan-500/80 text-slate-100 shadow-md ring-1 ring-cyan-500/30'
-                          : 'bg-slate-900/90 border-slate-800 hover:bg-slate-900 hover:border-slate-700 text-slate-300'
+                      title={
+                        locked
+                          ? `Butuh ${tierLabel(model.minTier)} - upgrade akun kamu untuk memakai model ini.`
+                          : undefined
+                      }
+                      className={`p-3 rounded-xl transition border text-left ${
+                        locked
+                          ? 'cursor-not-allowed bg-slate-900/50 border-slate-800/70 opacity-70 hover:opacity-90'
+                          : `cursor-pointer ${
+                              isSelected
+                                ? 'bg-slate-900 border-cyan-500/80 text-slate-100 shadow-md ring-1 ring-cyan-500/30'
+                                : 'bg-slate-900/90 border-slate-800 hover:bg-slate-900 hover:border-slate-700 text-slate-300'
+                            }`
                       }`}
                     >
                       <div className="flex items-center justify-between mb-1.5">
@@ -197,6 +220,12 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
                           {model.isFreeQuotaEligible && (
                             <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-700/60 shrink-0">
                               FREE
+                            </span>
+                          )}
+                          {locked && (
+                            <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-700/60 shrink-0 flex items-center gap-0.5">
+                              <Lock className="w-2.5 h-2.5" />
+                              {tierLabel(model.minTier).toUpperCase()}
                             </span>
                           )}
                           <span className="text-[9px] font-mono px-1 py-0.5 rounded bg-slate-800 text-slate-400 shrink-0">
@@ -213,6 +242,13 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
                       <p className="text-[11px] text-slate-400 line-clamp-2 mb-2 leading-relaxed">
                         {model.description}
                       </p>
+
+                      {locked && (
+                        <p className="text-[10px] text-amber-300/90 mb-2 flex items-center gap-1">
+                          <Lock className="w-3 h-3" />
+                          Butuh {tierLabel(model.minTier)} (tier {model.minTier})
+                        </p>
+                      )}
 
                       <div className="flex flex-wrap items-center gap-1">
                         {model.tags?.map((tag) => (

@@ -9,6 +9,7 @@ import {
   ProviderId,
   ProviderAdapter,
 } from './types';
+import { Tier } from './tiers';
 import { getModelById, getFallbackForModel, VERIFIED_MODELS } from './models';
 import { radoxAdapter, RadoxAdapter } from './providers/radox';
 import { inkstoneAdapter, InkstoneAdapter } from './providers/inkstone';
@@ -53,17 +54,32 @@ export class ProviderRouter {
   /**
    * Builds an execution route plan with primary and ordered fallback candidates.
    */
-  buildRoutePlan(requestedModelId: string, preferredProvider?: ProviderId): RouteExecutionPlan {
+  buildRoutePlan(
+    requestedModelId: string,
+    preferredProvider?: ProviderId,
+    maxTier?: Tier
+  ): RouteExecutionPlan {
     const model = getModelById(requestedModelId, preferredProvider);
     const primaryProvider = preferredProvider || model?.provider || 'radox';
     const primaryModel = model?.id || requestedModelId;
 
     const fallbackChain: Array<{ provider: ProviderId; model: string; reason: string }> = [];
 
+    // A fallback may never unlock a model the account is not allowed to use.
+    const isAllowed = (candidateId: string, candidateProvider: ProviderId) => {
+      if (maxTier === undefined) return true;
+      const candidate = getModelById(candidateId, candidateProvider);
+      return (candidate?.minTier ?? 0) <= maxTier;
+    };
+
     // Check primary model's designated fallback
     if (model) {
       const fallbackTarget = getFallbackForModel(model);
-      if (fallbackTarget && fallbackTarget.targetProvider !== primaryProvider) {
+      if (
+        fallbackTarget &&
+        fallbackTarget.targetProvider !== primaryProvider &&
+        isAllowed(fallbackTarget.targetModelId, fallbackTarget.targetProvider)
+      ) {
         fallbackChain.push({
           provider: fallbackTarget.targetProvider,
           model: fallbackTarget.targetModelId,
@@ -77,6 +93,7 @@ export class ProviderRouter {
     for (const p of allProviders) {
       if (p !== primaryProvider && !fallbackChain.some((f) => f.provider === p)) {
         const defaultModel = VERIFIED_MODELS.find((m) => m.provider === p)?.id || 'intern-latest';
+        if (!isAllowed(defaultModel, p)) continue;
         fallbackChain.push({
           provider: p,
           model: defaultModel,
@@ -113,7 +130,7 @@ export class ProviderRouter {
     options: ChatOptions,
     onChunk: (chunk: ChatStreamChunk) => void
   ): Promise<ChatCompletionResult> {
-    const plan = this.buildRoutePlan(options.model, options.provider);
+    const plan = this.buildRoutePlan(options.model, options.provider, options.maxTier);
     const executionAttempts: Array<{ provider: ProviderId; model: string; isFallback: boolean; fallbackReason?: string }> = [
       { provider: plan.primaryProvider, model: plan.primaryModel, isFallback: false },
       ...plan.fallbackChain.map((f) => ({
@@ -227,7 +244,7 @@ export class ProviderRouter {
    * Non-streaming completion with automatic fallback
    */
   async completeChat(options: ChatOptions): Promise<ChatCompletionResult> {
-    const plan = this.buildRoutePlan(options.model, options.provider);
+    const plan = this.buildRoutePlan(options.model, options.provider, options.maxTier);
     const executionAttempts = [
       { provider: plan.primaryProvider, model: plan.primaryModel, isFallback: false },
       ...plan.fallbackChain.map((f) => ({

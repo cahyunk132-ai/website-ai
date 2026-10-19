@@ -6,7 +6,8 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { ChatMessage, ProviderId } from './ai/types';
 import { createServerSupabaseClient, createServerSupabaseAdminClient } from './supabase/server';
-import { resolveDailyLimit } from './plans';
+import { resolveTierLimit } from './roles';
+import { UserRole } from './ai/tiers';
 import { encryptSecret, decryptSecret } from './crypto';
 
 export interface ConversationSummary {
@@ -781,8 +782,8 @@ export async function checkAndIncrementUsage(
   userId: string,
   limit?: number
 ): Promise<UsageStatus> {
-  // Without an explicit limit the quota of the subscription plan applies.
-  const effectiveLimit = limit ?? (await resolveDailyLimit(userId));
+  // Without an explicit limit the quota of the role (tier) applies.
+  const effectiveLimit = limit ?? (await resolveTierLimit(userId));
   const date = todayUtc();
   const supabase = getAdminClient();
 
@@ -937,6 +938,82 @@ export async function addTokensToUsage(userId: string, tokens: number): Promise<
 /**
  * Returns the current usage snapshot of a user for the current day.
  */
+/**
+ * Remembers the role that was active for the requests of a user today.
+ *
+ * The column is only written when it changes, the write is best effort: a
+ * failure never breaks a chat request.
+ */
+const usageRoleCache = new Map<string, string>();
+
+export async function recordUsageRole(userId: string, role: UserRole): Promise<void> {
+  if (!userId || !role) return;
+  if (usageRoleCache.get(userId) === role) return;
+
+  const supabase = getAdminClient();
+  if (!supabase) {
+    usageRoleCache.set(userId, role);
+    return;
+  }
+
+  try {
+    const { error } = await supabase
+      .from('usage_logs')
+      .update({ role })
+      .eq('user_id', userId)
+      .eq('date', todayUtc());
+
+    if (!error) {
+      usageRoleCache.set(userId, role);
+    }
+  } catch {
+    // Tracking is optional, a failure is ignored.
+  }
+}
+
+/**
+ * The number of requests of several users today. Used by the admin page.
+ */
+export async function getUsageCountsForUsers(
+  userIds: string[]
+): Promise<Record<string, number>> {
+  const result: Record<string, number> = {};
+  if (!userIds.length) return result;
+
+  const date = todayUtc();
+  const supabase = getAdminClient();
+
+  if (!supabase) {
+    for (const userId of userIds) {
+      const current = memoryUsage.get(userId);
+      result[userId] = current && current.date === date ? current.requestCount : 0;
+    }
+    return result;
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('usage_logs')
+      .select('user_id, request_count')
+      .eq('date', date)
+      .in('user_id', userIds);
+
+    if (!error && data) {
+      for (const row of data) {
+        result[row.user_id as string] = Number(row.request_count ?? 0);
+      }
+    }
+  } catch {
+    // The admin page shows 0 when the usage cannot be read.
+  }
+
+  for (const userId of userIds) {
+    if (result[userId] === undefined) result[userId] = 0;
+  }
+
+  return result;
+}
+
 export async function getUsageSnapshot(
   userId: string,
   limit: number = DAILY_REQUEST_LIMIT

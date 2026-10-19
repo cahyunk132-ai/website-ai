@@ -8,11 +8,19 @@
  * Tokens are HMAC-SHA256 signed payloads encoded as `base64url(payload).hex(hmac)`.
  */
 
+import type { Tier, UserRole } from './ai/tiers';
+
 export interface UserSession {
   id: string;
   email: string;
   name: string;
-  role: 'admin' | 'user';
+  /**
+   * The role of the account. It decides the daily quota, the maximum length of
+   * an answer and which models may be used.
+   */
+  role: UserRole;
+  /** The access level of the role: 0 = free, 1 - 4 = premium, admin = 4. */
+  tier: Tier;
   avatarUrl?: string;
   createdAt: string;
   /**
@@ -106,6 +114,44 @@ function base64UrlDecode(input: string): string {
 }
 
 /**
+ * Normalises a role that comes from an old session token.
+ * The former role "user" is now called "free".
+ */
+export function normalizeRole(value: unknown): UserRole {
+  if (value === 'admin') return 'admin';
+  if (
+    value === 'premium1' ||
+    value === 'premium2' ||
+    value === 'premium3' ||
+    value === 'premium4'
+  ) {
+    return value;
+  }
+  return 'free';
+}
+
+/**
+ * Normalises the tier of a session: it is derived from the role when the
+ * token does not carry a valid tier.
+ */
+export function normalizeTier(value: unknown, role: UserRole): Tier {
+  if (value === 0 || value === 1 || value === 2 || value === 3 || value === 4) {
+    return value;
+  }
+  return role === 'admin' ? 4 : TIER_BY_ROLE[role];
+}
+
+/** The tier of every role, kept local so the module stays edge compatible. */
+const TIER_BY_ROLE: Record<UserRole, Tier> = {
+  admin: 4,
+  free: 0,
+  premium1: 1,
+  premium2: 2,
+  premium3: 3,
+  premium4: 4,
+};
+
+/**
  * Creates a signed, tamper-proof session token.
  */
 export async function createSessionToken(user: UserSession): Promise<string> {
@@ -116,6 +162,7 @@ export async function createSessionToken(user: UserSession): Promise<string> {
     email: user.email,
     name: user.name,
     role: user.role,
+    tier: user.tier,
     avatarUrl: user.avatarUrl,
     createdAt: user.createdAt,
     exp: Date.now() + SESSION_MAX_AGE_SECONDS * 1000,
@@ -148,11 +195,17 @@ export async function verifySessionToken(token: string): Promise<UserSession | n
       return null; // Expired
     }
 
+    // Tokens that were created before the role & tier system only know the
+    // old roles ("admin" / "user"); they are migrated to the new ones.
+    const role = normalizeRole(parsed.role);
+    const tier = normalizeTier(parsed.tier, role);
+
     return {
       id: parsed.id,
       email: parsed.email,
       name: parsed.name,
-      role: parsed.role || 'user',
+      role,
+      tier,
       avatarUrl: parsed.avatarUrl,
       createdAt: parsed.createdAt,
     };

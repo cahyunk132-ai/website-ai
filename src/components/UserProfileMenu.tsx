@@ -12,6 +12,7 @@ import {
   Crown,
 } from 'lucide-react';
 import { useAuth } from '@/lib/AuthContext';
+import { getTierConfig, getTierForRole } from '@/lib/ai/tiers';
 
 interface UserProfileMenuProps {
   /** Opens the premium panel (plan, quota and upgrade). */
@@ -20,7 +21,9 @@ interface UserProfileMenuProps {
 
 export const UserProfileMenu: React.FC<UserProfileMenuProps> = ({ onOpenPremium }) => {
   const { user, logout, openAuthModal } = useAuth();
-  const isPremium = user?.plan === 'premium';
+  const isPremium = user?.plan === 'premium' || (user?.role ? user.role !== 'free' : false);
+  const tierConfig = getTierConfig(user?.role ?? 'free');
+  const tier = getTierForRole(user?.role ?? 'free');
   const [isOpen, setIsOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -68,9 +71,16 @@ export const UserProfileMenu: React.FC<UserProfileMenuProps> = ({ onOpenPremium 
                 </span>
               ) : (
                 <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-slate-800 text-slate-400 font-mono">
-                  PRO
+                  T{tier}
                 </span>
               )}
+              <span
+                className="text-[9px] px-1.5 py-0.2 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/40 font-mono flex items-center gap-0.5"
+                title={`${tierConfig.name} - ${tierConfig.description}`}
+              >
+                <span aria-hidden>{tierConfig.badge}</span>
+                {tierConfig.name.toUpperCase()}
+              </span>
               {isPremium && (
                 <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/40 font-mono flex items-center gap-0.5">
                   <Crown className="w-2.5 h-2.5" />
@@ -107,6 +117,25 @@ export const UserProfileMenu: React.FC<UserProfileMenuProps> = ({ onOpenPremium 
               </span>
             </div>
           </div>
+
+          {/* Tier info */}
+          <div className="flex items-center justify-between px-3 py-2 rounded-xl bg-slate-950/60 border border-slate-800/70">
+            <span className="text-[10px] text-slate-400">Tier akun:</span>
+            <span className="text-[10px] text-amber-300 font-mono">
+              {tierConfig.badge} {tierConfig.name} (T{tier})
+            </span>
+          </div>
+
+          {/* Admin: manage the roles */}
+          {user.role === 'admin' && (
+            <a
+              href="/admin/users"
+              className="flex items-center gap-2 w-full px-3 py-2 rounded-xl text-cyan-300 hover:text-cyan-200 hover:bg-cyan-950/40 transition text-xs"
+            >
+              <ShieldCheck className="w-3.5 h-3.5" />
+              <span>Kelola role pengguna</span>
+            </a>
+          )}
 
           {/* Premium / Plan */}
           {onOpenPremium && (
