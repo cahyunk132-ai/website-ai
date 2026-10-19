@@ -15,6 +15,12 @@ export interface UserSession {
   role: 'admin' | 'user';
   avatarUrl?: string;
   createdAt: string;
+  /**
+   * The subscription plan of the account. It is resolved on every request
+   * (the database is the source of truth) and therefore never part of the
+   * signed session token.
+   */
+  plan?: 'free' | 'premium';
 }
 
 export const SESSION_COOKIE_NAME = 'hyunk_session';
@@ -103,8 +109,15 @@ function base64UrlDecode(input: string): string {
  * Creates a signed, tamper-proof session token.
  */
 export async function createSessionToken(user: UserSession): Promise<string> {
+  // The fields are listed explicitly: the plan must not be baked into the
+  // cookie, otherwise an upgrade would only be visible after a new login.
   const payload = {
-    ...user,
+    id: user.id,
+    email: user.email,
+    name: user.name,
+    role: user.role,
+    avatarUrl: user.avatarUrl,
+    createdAt: user.createdAt,
     exp: Date.now() + SESSION_MAX_AGE_SECONDS * 1000,
   };
   const base64 = base64UrlEncode(JSON.stringify(payload));

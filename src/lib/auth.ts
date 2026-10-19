@@ -367,6 +367,18 @@ export async function getSessionFromCookies(): Promise<UserSession | null> {
 /**
  * Retrieves the current session from an incoming Request object (Cookie or Authorization header)
  */
+/**
+ * Resolves the id of a locally stored account from its email address.
+ *
+ * Used by the premium panel when no database is configured, so an
+ * administrator can still change the plan of the seeded demo account.
+ */
+export function findLocalUserIdByEmail(email: string): string | null {
+  ensureDefaultUsers();
+  const found = memoryUsers.get(email.trim().toLowerCase());
+  return found?.id ?? null;
+}
+
 export async function getSessionFromRequest(request: Request): Promise<UserSession | null> {
   try {
     // 1. Check Authorization header

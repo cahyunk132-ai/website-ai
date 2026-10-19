@@ -6,6 +6,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { ChatMessage, ProviderId } from './ai/types';
 import { createServerSupabaseClient, createServerSupabaseAdminClient } from './supabase/server';
+import { resolveDailyLimit } from './plans';
 import { encryptSecret, decryptSecret } from './crypto';
 
 export interface ConversationSummary {
@@ -49,7 +50,12 @@ export interface UsageStatus {
 }
 
 /**
- * Maximum number of AI requests allowed per user per day.
+ * Fallback number of AI requests allowed per user per day.
+ *
+ * The real quota comes from the subscription plan of the account
+ * (5 prompts per day for a free account, 10x that for a premium one), see
+ * `src/lib/plans.ts`. This constant is only the safety net for the calls
+ * that do not know the plan of the user.
  * Can be tuned per deployment with the `DAILY_REQUEST_LIMIT` environment variable.
  */
 export const DAILY_REQUEST_LIMIT = (() => {
@@ -773,8 +779,10 @@ function todayUtc(): string {
  */
 export async function checkAndIncrementUsage(
   userId: string,
-  limit: number = DAILY_REQUEST_LIMIT
+  limit?: number
 ): Promise<UsageStatus> {
+  // Without an explicit limit the quota of the subscription plan applies.
+  const effectiveLimit = limit ?? (await resolveDailyLimit(userId));
   const date = todayUtc();
   const supabase = getAdminClient();
 
@@ -785,8 +793,8 @@ export async function checkAndIncrementUsage(
     const requestCount = current && current.date === date ? current.requestCount : 0;
     const tokensUsed = current && current.date === date ? current.tokensUsed : 0;
 
-    if (requestCount >= limit) {
-      return { allowed: false, remaining: 0, limit, requestCount, tokensUsed, date };
+    if (requestCount >= effectiveLimit) {
+      return { allowed: false, remaining: 0, limit: effectiveLimit, requestCount, tokensUsed, date };
     }
 
     memoryUsage.set(userId, {
@@ -797,8 +805,8 @@ export async function checkAndIncrementUsage(
 
     return {
       allowed: true,
-      remaining: Math.max(0, limit - requestCount - 1),
-      limit,
+      remaining: Math.max(0, effectiveLimit - requestCount - 1),
+      limit: effectiveLimit,
       requestCount: requestCount + 1,
       tokensUsed,
       date,
@@ -814,9 +822,9 @@ export async function checkAndIncrementUsage(
     if (!error && typeof data === 'number') {
       const requestCount = data;
       return {
-        allowed: requestCount <= limit,
-        remaining: Math.max(0, limit - requestCount),
-        limit,
+        allowed: requestCount <= effectiveLimit,
+        remaining: Math.max(0, effectiveLimit - requestCount),
+        limit: effectiveLimit,
         requestCount,
         tokensUsed: 0,
         date,
@@ -836,14 +844,14 @@ export async function checkAndIncrementUsage(
 
     if (error) {
       console.warn('[Storage] Usage lookup failed, allowing request:', error.message);
-      return { allowed: true, remaining: limit, limit, requestCount: 0, tokensUsed: 0, date };
+      return { allowed: true, remaining: effectiveLimit, limit: effectiveLimit, requestCount: 0, tokensUsed: 0, date };
     }
 
     const requestCount = data?.request_count ?? 0;
     const tokensUsed = data?.tokens_used ?? 0;
 
-    if (requestCount >= limit) {
-      return { allowed: false, remaining: 0, limit, requestCount, tokensUsed, date };
+    if (requestCount >= effectiveLimit) {
+      return { allowed: false, remaining: 0, limit: effectiveLimit, requestCount, tokensUsed, date };
     }
 
     const { error: upsertError } = await supabase
@@ -864,15 +872,15 @@ export async function checkAndIncrementUsage(
 
     return {
       allowed: true,
-      remaining: Math.max(0, limit - requestCount - 1),
-      limit,
+      remaining: Math.max(0, effectiveLimit - requestCount - 1),
+      limit: effectiveLimit,
       requestCount: requestCount + 1,
       tokensUsed,
       date,
     };
   } catch (err: any) {
     console.warn('[Storage] Usage accounting failed, allowing request:', err?.message || String(err));
-    return { allowed: true, remaining: limit, limit, requestCount: 0, tokensUsed: 0, date };
+    return { allowed: true, remaining: effectiveLimit, limit: effectiveLimit, requestCount: 0, tokensUsed: 0, date };
   }
 }
 

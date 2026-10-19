@@ -10,6 +10,7 @@ import { z } from 'zod';
 import { defaultRouter } from '@/lib/ai/router';
 import { ProviderId, ChatMessage, FileAttachment } from '@/lib/ai/types';
 import { saveMessage, createConversation, checkAndIncrementUsage } from '@/lib/storage';
+import { getUserPlan, planFor, dailyLimitFor, isPremiumPlan } from '@/lib/plans';
 import { executeWebSearch } from '@/lib/ai/tools';
 import { getSessionFromRequest } from '@/lib/auth';
 import { buildConversationTitle } from '@/lib/conversationTitle';
@@ -75,21 +76,34 @@ export async function POST(req: NextRequest) {
     }
 
     // Enforce the per-user daily quota before any provider call is made.
+    // The quota depends on the subscription plan: a free account may send
+    // 5 prompts per day, a premium account 10x as many.
     // Malformed requests are rejected before they are counted.
-    const usage = await checkAndIncrementUsage(user.id);
+    const plan = await getUserPlan(user.id);
+    const planLimit = dailyLimitFor(plan);
+    const usage = await checkAndIncrementUsage(user.id, planLimit);
     if (!usage.allowed) {
+      const planLabel = planFor(plan).label;
+      const upgradeHint = isPremiumPlan(plan)
+        ? 'Coba lagi besok, kuota premium direset setiap pukul 00:00 UTC.'
+        : 'Upgrade ke Premium untuk 10x kuota harian, atau coba lagi besok pukul 00:00 UTC.';
+
       return NextResponse.json(
         {
-          error: `Batas penggunaan harian (${usage.limit} request) telah tercapai. Coba lagi besok.`,
-          code: 'DAILY_LIMIT_REACHED',
+          error: `Batas prompt harian paket ${planLabel} (${usage.limit} prompt) telah tercapai. ${upgradeHint}`,
+          code: 'PLAN_LIMIT_REACHED',
+          plan,
+          planLabel,
           limit: usage.limit,
           remaining: 0,
+          upgradeAvailable: !isPremiumPlan(plan),
         },
         {
           status: 429,
           headers: {
             'X-RateLimit-Limit': String(usage.limit),
             'X-RateLimit-Remaining': '0',
+            'X-Plan': plan,
             'Retry-After': '3600',
           },
         }
@@ -522,6 +536,7 @@ export async function POST(req: NextRequest) {
         'X-Accel-Buffering': 'no',
         'X-RateLimit-Limit': String(usage.limit),
         'X-RateLimit-Remaining': String(usage.remaining),
+        'X-Plan': plan,
       },
     });
   } catch (err: unknown) {

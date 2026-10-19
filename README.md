@@ -92,6 +92,7 @@
   - Syntax highlighted code blocks with one-click **Copy Code** and language badges.
   - One-click **Regenerate Response** and **Copy Message**.
   - Accessible contrast, keyboard shortcuts, and responsive mobile drawer.
+- **Premium Plans (Free & Premium)**: the subscription plan decides how many AI prompts an account may send per day. A **free** account gets **5 prompts per day**, a **premium** account gets **10x** as many (**50 prompts per day**). The quota is enforced on the server before any provider call, the remaining quota is shown live in the composer, and the **Hyunk Premium** panel (crown icon in the user menu, also in the command palette) compares the two plans and upgrades the account in one click. The plan lives in the `user_plans` table and is only reachable with the service role, so a user can never raise his own quota. An administrator can grant or revoke the plan of any account by email.
 - **Collision Free Toolbar**: every action sits directly in the header (**Skills**, **Tools**, **Palette**, **Memory**, **Jadwal**, **Share**, **Sampah**, **Export**, **Download**, **Key Pool**) as a compact icon button with its name in the tooltip, so there is no extra "More" click and the buttons can never overlap on a narrow laptop. The model selector shrinks with an ellipsis instead of being squeezed, and the toolbar scrolls as a last resort.
 - **Working Sidebar Toggle**: the hamburger button collapses the sidebar on a desktop (the chat area then uses the full width) and opens the drawer on a phone. The icon follows the state and `Ctrl+B` does the same.
 
@@ -157,6 +158,7 @@ supabase/migrations/20261018000000_init_hyunk_ai_hub.sql   # base schema
 supabase/migrations/20261019000001_fix_and_features.sql    # folders, quota, multi-key pool
 supabase/migrations/20261020000000_agent_skills.sql        # skill library + 12 seeded skills
 supabase/migrations/20261021000000_features_memory_share_schedule.sql  # memory, prompts, shares, feedback, schedules, tags, trash
+supabase/migrations/20261022000000_premium_plans.sql        # subscription plans (free / premium)
 ```
 Or via the Supabase CLI:
 ```bash
@@ -180,6 +182,11 @@ presets) with RLS policies and an idempotent seed of the 12 built-in skills
 (code review, debugging, test authoring, API design, security audit, deep research,
 technical writing, SEO content, data analysis, SQL analyst, product spec and prompt
 engineering).
+
+The fifth migration adds the `user_plans` table (`plan` = `free` | `premium`,
+`premium_until`) plus the `get_user_plan()` resolver. The table is restricted to
+the service role: the plan decides the daily quota, so it must never be writable
+by the user himself.
 
 The fourth migration adds the storage of the new features: the `user_memories` table
 (AI memory), `user_prompts` (prompt library), `conversation_shares` (public share
@@ -235,6 +242,7 @@ website-ai/
 │   │   │   ├── share/[token]/route.ts # Public share reader (no login)
 │   │   │   ├── feedback/route.ts      # Thumbs up / down per message
 │   │   │   ├── usage/daily/route.ts   # Daily usage for the activity chart
+│   │   │   ├── premium/route.ts       # Plan, quota and upgrade of the account
 │   │   │   └── conversations/         # Conversation CRUD endpoints
 │   │   ├── globals.css                # Dark theme & styling
 │   │   ├── layout.tsx                 # Root layout & metadata
@@ -253,6 +261,8 @@ website-ai/
 │   │   ├── TrashModal.tsx             # Trash & restore
 │   │   ├── UsageChart.tsx             # 7 day activity chart
 │   │   ├── ContextMeter.tsx           # Context window indicator
+│   │   ├── PremiumPanel.tsx           # Plan comparison, quota and upgrade
+│   │   ├── QuotaMeter.tsx             # Daily prompt quota in the composer
 │   │   ├── AgentReasoningCard.tsx     # Reasoning, tool outputs & agent timeline
 │   │   └── ui/
 │   │       ├── CodeBlock.tsx          # Syntax highlighted code
@@ -286,6 +296,7 @@ website-ai/
 │       ├── featureStorage.ts          # Memory, prompts, shares, feedback, schedules
 │       ├── memory.ts                  # Memory extraction engine
 │       ├── contextMeter.ts            # Context window estimation
+│       ├── plans.ts                   # Free / premium plans and the daily quota
 │       ├── scheduleRunner.ts          # Cron evaluation & execution
 │       ├── crypto.ts                  # AES-256-GCM encryption & redaction
 │       └── storage.ts                 # Database & in-memory persistence
