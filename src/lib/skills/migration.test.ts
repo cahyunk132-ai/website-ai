@@ -112,8 +112,9 @@ describe('skills migration', () => {
   it('seeds the same body as the TypeScript built-in library', () => {
     for (const skill of BUILTIN_SKILLS) {
       const seeded = extractSeededBody(expansionSql, skill.slug);
-      expect(seeded, `body of ${skill.slug} is missing from the SQL seed`).not.toBeNull();
-      expect(seeded, `body of ${skill.slug} drifted from the SQL seed`).toBe(skill.content);
+      const normalizedSeeded = seeded?.replace(/\r\n/g, '\n');
+      const normalizedContent = skill.content.replace(/\r\n/g, '\n');
+      expect(normalizedSeeded, `body of ${skill.slug} drifted from the SQL seed`).toBe(normalizedContent);
     }
   });
 

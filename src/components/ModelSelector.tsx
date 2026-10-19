@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
-import { ChevronDown, Sparkles, Check, Search, Zap, ShieldCheck, Lock } from 'lucide-react';
+import { ChevronDown, Sparkles, Check, Search, Zap, ShieldCheck, Lock, Sun } from 'lucide-react';
 import { ModelCapability, ProviderId } from '@/lib/ai/types';
 import { Tier, tierLabel } from '@/lib/ai/tiers';
 
@@ -162,6 +162,16 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
                   Intern InkStone
                 </button>
               </div>
+ 
+              {/* Radox Daytime Notice */}
+              {selectedProvider === 'radox' && (
+                <div className="flex items-start gap-2 p-2.5 rounded-xl bg-amber-950/40 border border-amber-800/40 text-[11px] text-amber-200">
+                  <Sun className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
+                  <div className="leading-relaxed">
+                    <strong className="text-amber-300 font-semibold">Jadwal Operasional:</strong> Model Radox AI hanya aktif untuk penggunaan <strong className="text-white">siang hari</strong> (malam hari billing Radox offline). Untuk percakapan malam hari, silakan pilih <strong className="text-white">Intern InkStone</strong>.
+                  </div>
+                </div>
+              )}
 
               {/* Quick Search */}
               <div className="relative">
@@ -260,6 +270,11 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
                       )}
 
                       <div className="flex flex-wrap items-center gap-1">
+                        {model.provider === 'radox' && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded border bg-amber-950/70 text-amber-300 border-amber-800/60 font-medium">
+                            ☀️ Siang Hari
+                          </span>
+                        )}
                         {model.tags?.map((tag) => (
                           <span
                             key={tag}

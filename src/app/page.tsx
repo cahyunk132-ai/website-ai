@@ -585,6 +585,24 @@ export default function ChatPage() {
   };
 
   /**
+   * Translates backend errors to clear, friendly user notifications.
+   * Radox AI upstream billing verification goes offline every night, so users
+   * are explicitly instructed to use Intern InkStone at night.
+   */
+  const formatErrorMessage = (raw: string): string => {
+    const lower = raw.toLowerCase();
+    if (
+      lower.includes('billing verification failed') ||
+      lower.includes('payment method') ||
+      lower.includes('tokenplan') ||
+      (lower.includes('radox') && (lower.includes('billing') || lower.includes('quota') || lower.includes('failed') || lower.includes('offline')))
+    ) {
+      return 'Layanan model Radox AI hanya beroperasi untuk penggunaan siang hari (malam hari billing Radox offline). Silakan pilih model dari Intern InkStone untuk melanjutkan obrolan.';
+    }
+    return raw;
+  };
+
+  /**
    * The selected model must always be accessible for the tier of the account.
    * A model of a higher tier is locked in the model selector.
    */
@@ -1081,7 +1099,7 @@ export default function ChatPage() {
           throw new Error(errorJson.error || 'Model ini membutuhkan tier lebih tinggi.');
         }
 
-        throw new Error(errorJson.error || `HTTP ${response.status}`);
+        throw new Error(formatErrorMessage(errorJson.error || `HTTP ${response.status}`));
       }
 
       // The server reports the remaining quota of the plan in the headers,
@@ -1217,7 +1235,12 @@ export default function ChatPage() {
                 );
               }
               if (parsed.notice) {
-                setFallbackAlert(parsed.notice);
+                const noticeText =
+                  parsed.notice.toLowerCase().includes('tokenplan') ||
+                  parsed.notice.toLowerCase().includes('billing')
+                    ? 'Pemberitahuan: Model Radox AI hanya aktif pada siang hari. Obrolan dialihkan via Intern InkStone.'
+                    : parsed.notice;
+                setFallbackAlert(noticeText);
               }
               if (parsed.sources) {
                 setWebSearchSources(parsed.sources);
@@ -1243,7 +1266,7 @@ export default function ChatPage() {
                 );
               }
               if (parsed.error) {
-                setErrorMessage(parsed.error);
+                setErrorMessage(formatErrorMessage(parsed.error));
               }
             } catch {
               // Partial line ignore
@@ -1254,7 +1277,7 @@ export default function ChatPage() {
     } catch (err: unknown) {
       if ((err as Error).name !== 'AbortError') {
         const msg = err instanceof Error ? err.message : String(err);
-        setErrorMessage(msg);
+        setErrorMessage(formatErrorMessage(msg));
       }
     } finally {
       setIsStreaming(false);
@@ -1930,8 +1953,11 @@ export default function ChatPage() {
                         .replace(' (InkStone)', '')
                         .replace(' (Radox)', '')}
                     </span>
-                    <span className="text-[9px] px-1 py-0.2 rounded bg-slate-800 text-slate-400 font-mono">
-                      {m.provider === 'inkstone' ? 'Ink' : 'Radox'}
+                    <span
+                      className="text-[9px] px-1 py-0.2 rounded bg-slate-800 text-slate-400 font-mono"
+                      title={m.provider === 'radox' ? 'Radox AI: Beroperasi siang hari' : 'Intern InkStone: 24 Jam'}
+                    >
+                      {m.provider === 'inkstone' ? 'Ink' : 'Radox ☀️'}
                     </span>
                   </button>
                 );

@@ -163,7 +163,10 @@ export class ProviderRouter {
       try {
         // Notify client if this execution is a fallback route
         if (attempt.isFallback) {
-          const fallbackNotice = `Notice: Primary provider quota or rate limit reached. Auto-routed via ${adapter.name} (${attempt.model}).`;
+          const fallbackNotice =
+            plan.primaryProvider === 'radox'
+              ? `Pemberitahuan: Model Radox AI hanya aktif pada siang hari. Obrolan dialihkan via ${adapter.name} (${attempt.model}).`
+              : `Notice: Primary provider quota or rate limit reached. Auto-routed via ${adapter.name} (${attempt.model}).`;
           onChunk({
             text: '',
             done: false,
@@ -232,9 +235,23 @@ export class ProviderRouter {
           continue;
         }
 
+        // If Radox failed due to billing/offline during nighttime, explain clearly
+        if (
+          attempt.provider === 'radox' &&
+          (normError.message.toLowerCase().includes('billing') ||
+           normError.message.toLowerCase().includes('payment') ||
+           normError.message.toLowerCase().includes('tokenplan'))
+        ) {
+          throw new Error('Layanan Radox AI hanya beroperasi untuk penggunaan siang hari (malam hari billing Radox offline). Silakan pilih model dari Intern InkStone.');
+        }
+
         // If not eligible (e.g., auth failure or malformed payload) or no fallbacks left, throw
         throw normError;
       }
+    }
+
+    if (plan.primaryProvider === 'radox') {
+      throw new Error('Layanan Radox AI hanya beroperasi untuk penggunaan siang hari (malam hari billing Radox offline). Silakan pilih model dari Intern InkStone.');
     }
 
     throw lastError || new Error('All configured providers failed or no eligible provider available.');

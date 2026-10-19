@@ -132,9 +132,16 @@ export class RadoxAdapter implements ProviderAdapter {
       }
 
       const isRateLimit = res.status === 429;
+      const isBilling =
+        errorMsg.toLowerCase().includes('billing verification') ||
+        errorMsg.toLowerCase().includes('payment method');
+      if (isBilling) {
+        errorMsg = 'Layanan Radox AI hanya beroperasi untuk penggunaan siang hari (malam hari billing offline). Silakan gunakan model dari Intern InkStone.';
+      }
       const isQuota =
         res.status === 402 ||
         res.status === 403 ||
+        isBilling ||
         errorMsg.toLowerCase().includes('quota') ||
         errorMsg.toLowerCase().includes('balance');
 
@@ -233,9 +240,16 @@ export class RadoxAdapter implements ProviderAdapter {
       }
 
       const isRateLimit = res.status === 429;
+      const isBilling =
+        errorMsg.toLowerCase().includes('billing verification') ||
+        errorMsg.toLowerCase().includes('payment method');
+      if (isBilling) {
+        errorMsg = 'Layanan Radox AI hanya beroperasi untuk penggunaan siang hari (malam hari billing offline). Silakan gunakan model dari Intern InkStone.';
+      }
       const isQuota =
         res.status === 402 ||
         res.status === 403 ||
+        isBilling ||
         errorMsg.toLowerCase().includes('quota') ||
         errorMsg.toLowerCase().includes('balance');
 
