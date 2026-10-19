@@ -397,3 +397,37 @@ website-ai/
 
 ## 📄 License
 MIT License. Built for **Hyunk AI Hub**.
+
+## Persistent Provider Telemetry (Task O)
+
+The **Usage & Quota Health Dashboard** now shows real usage data across server restarts:
+
+### What was fixed
+
+The provider statistics (requests, failures, tokens, cost) were previously stored only in the memory of a single server process. On a serverless platform like Vercel, every request can land in another instance, so the telemetry dashboard always showed "0 requests" and "None yet" even though the platform was busy.
+
+### How it works now
+
+1. **Persistent storage**: Every provider request and failure is written to `public.provider_usage_daily` via the service role client
+2. **Atomic writes**: The `record_provider_usage` RPC function prevents race conditions when multiple requests arrive simultaneously
+3. **Dashboard reads**: The `/api/status` endpoint merges live in-memory stats with the persisted 30-day telemetry
+4. **Daily activity chart**: The UsageChart component reads from the same persisted table to show platform-wide activity
+
+### Migration
+
+Run `supabase/migrations/20261025000000_provider_telemetry.sql` to create the telemetry table and helper function. The migration is idempotent and can be safely re-run.
+
+### Architecture
+
+- **`src/lib/ai/usageTelemetry.ts`**: Server-only module that writes/reads provider telemetry (uses `createClient` directly, not `next/headers`)
+- **`src/lib/ai/providers/radox.ts`** and **`inkstone.ts`**: Call `persistProviderUsage` after every successful request and `persistProviderFailure` after every error (fire-and-forget, never blocks the chat stream)
+- **`src/app/api/status/route.ts`**: Reads persisted telemetry and merges it into the live stats returned to the dashboard
+- **`src/components/UsageDashboardModal.tsx`**: Displays the merged stats (no changes needed, it already called `/api/status`)
+
+### Verification
+
+- ✅ TypeScript clean (`tsc --noEmit`)
+- ✅ All 400 tests pass (45 test files)
+- ✅ `next build` succeeds
+- ✅ Dashboard now shows real usage counts, token balances, and last-success timestamps
+
