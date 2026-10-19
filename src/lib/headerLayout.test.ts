@@ -119,9 +119,16 @@ describe('header toolbar layout', () => {
     );
   });
 
-  it('lets the header scroll instead of overlapping the buttons', () => {
-    expect(headerMarkup).toMatch(/overflow-x-auto/);
-    expect(headerMarkup).toMatch(/no-scrollbar/);
+  it('does not scroll the entire header so dropdowns are not clipped', () => {
+    // The root <header> must not use overflow-x-auto, otherwise dropdowns
+    // (like ModelSelector) get clipped at the bottom of the header and the
+    // entire navbar scrolls horizontally.
+    expect(page).toMatch(/<header[^>]*compact-header/);
+    const headerTag = page.slice(
+      page.indexOf('<header'),
+      page.indexOf('>', page.indexOf('<header'))
+    );
+    expect(headerTag).not.toMatch(/overflow-x-auto/);
   });
 
   it('gives the model selector room to breathe', () => {

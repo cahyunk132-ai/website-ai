@@ -1598,7 +1598,7 @@ export default function ChatPage() {
         <header
           className={`flex flex-wrap items-center gap-x-1.5 sm:gap-x-3 gap-y-1.5 px-2.5 sm:px-4 py-2 sm:py-3 border-b compact-header ${
             theme === 'dark' ? 'border-slate-800 bg-slate-950' : 'border-slate-200 bg-white'
-          } z-20 shrink-0 overflow-x-auto no-scrollbar`}
+          } z-30 shrink-0`}
         >
           <div className="flex items-center gap-1.5 sm:gap-2.5 min-w-0">
             <button
@@ -1752,14 +1752,21 @@ export default function ChatPage() {
         <div
           className={`px-2.5 sm:px-4 py-1.5 border-b ${
             theme === 'dark' ? 'border-slate-800 bg-slate-950' : 'border-slate-200 bg-slate-100'
-          } flex items-center justify-between text-xs overflow-x-auto no-scrollbar gap-2 shrink-0`}
+          } flex items-center text-xs gap-2 shrink-0 min-w-0`}
         >
-          <div className="flex items-center gap-1.5 shrink-0">
+          <div className="flex items-center gap-1.5 shrink-0 select-none">
             <Zap className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-            <span className="font-semibold text-emerald-400 hidden sm:inline">Free Tier Models:</span>
-            <span className="font-semibold text-emerald-400 sm:hidden">Free:</span>
+            <span className="font-semibold text-emerald-400 hidden sm:inline whitespace-nowrap">Free Tier Models:</span>
+            <span className="font-semibold text-emerald-400 sm:hidden whitespace-nowrap">Free:</span>
           </div>
-          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5">
+          <div
+            className="flex-1 flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5 min-w-0"
+            onWheel={(e) => {
+              if (e.deltaY !== 0) {
+                e.currentTarget.scrollLeft += e.deltaY;
+              }
+            }}
+          >
             {models
               .filter((m) => m.isFreeQuotaEligible)
               .slice(0, 15)

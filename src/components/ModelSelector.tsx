@@ -39,8 +39,17 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
         setIsOpen(false);
       }
     };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setIsOpen(false);
+      }
+    };
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
   }, []);
 
   const filteredModels = models.filter((m) => {
@@ -85,7 +94,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
             className="fixed inset-0 z-40 bg-black/60 sm:hidden"
             onClick={() => setIsOpen(false)}
           />
-          <div className="fixed sm:absolute inset-x-2 sm:inset-x-auto sm:left-0 top-safe-header sm:top-auto sm:mt-2 sm:w-[420px] max-h-[82dvh] sm:max-h-[34rem] rounded-2xl bg-slate-950 border border-slate-700/80 shadow-2xl shadow-black/90 z-50 flex flex-col overflow-hidden animate-fadeIn">
+          <div className="fixed sm:absolute inset-x-2 sm:inset-x-auto sm:left-0 top-safe-header sm:top-full sm:mt-2 sm:w-[460px] sm:max-w-[calc(100vw-2rem)] max-h-[82dvh] sm:max-h-[34rem] rounded-2xl bg-slate-950 border border-slate-700/80 shadow-2xl shadow-black/90 z-50 flex flex-col overflow-hidden animate-fadeIn">
             {/* Header Controls: Free Tier Toggle & Provider Filters */}
             <div className="p-3 border-b border-slate-800 bg-slate-900 space-y-2.5 shrink-0">
               {/* Free Tier Filter Switch */}
@@ -159,7 +168,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
             </div>
 
             {/* Model Items */}
-            <div className="max-h-80 sm:max-h-96 overflow-y-auto p-2.5 space-y-2 bg-slate-950">
+            <div className="max-h-80 sm:max-h-[26rem] overflow-y-auto p-2.5 pb-5 space-y-2 bg-slate-950">
               {filteredModels.length === 0 ? (
                 <div className="p-6 text-center text-xs text-slate-500">
                   No models match the filter.
