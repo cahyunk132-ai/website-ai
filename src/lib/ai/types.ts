@@ -24,6 +24,10 @@ export interface ChatMessage {
   provider?: ProviderId;
   isFallback?: boolean;
   fallbackReason?: string;
+  /** Prompt tokens reported by the provider for this message. */
+  tokensPrompt?: number;
+  /** Completion tokens reported by the provider for this message. */
+  tokensCompletion?: number;
 }
 
 export interface ModelCapability {
