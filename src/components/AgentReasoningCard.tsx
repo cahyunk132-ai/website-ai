@@ -43,6 +43,10 @@ export interface WebSearchSource {
   title: string;
   url: string;
   snippet: string;
+  /** The search engine that delivered the hit (Brave, DuckDuckGo, ...). */
+  provider?: string;
+  /** The publication date of the source, when the engine reports one. */
+  publishedDate?: string;
 }
 
 interface ParsedAgentContent {
@@ -220,9 +224,14 @@ export const AgentReasoningCard: React.FC<AgentReasoningCardProps> = ({
       {/* 0. Live Web Search Sources Citations if present */}
       {webSearchSources.length > 0 && (
         <div className="rounded-xl border border-cyan-500/30 bg-slate-950 p-3 space-y-2">
-          <div className="flex items-center gap-1.5 text-xs font-semibold text-cyan-300">
+          <div className="flex items-center gap-1.5 text-xs font-semibold text-cyan-300 flex-wrap">
             <Globe className="w-3.5 h-3.5 text-cyan-400" />
             <span>Web Search Sources & Live Citations ({webSearchSources.length})</span>
+            {webSearchSources[0]?.provider && (
+              <span className="text-[10px] font-normal px-1.5 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-800/40">
+                via {webSearchSources[0].provider}
+              </span>
+            )}
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
             {webSearchSources.map((src, i) => (
@@ -242,6 +251,9 @@ export const AgentReasoningCard: React.FC<AgentReasoningCardProps> = ({
                   </p>
                   <p className="text-[10px] text-slate-500 truncate flex items-center gap-1">
                     <span>{src.url.replace(/^https?:\/\//, '').split('/')[0]}</span>
+                    {src.publishedDate && (
+                      <span className="text-slate-600">· {src.publishedDate}</span>
+                    )}
                     <ExternalLink className="w-2.5 h-2.5 opacity-60" />
                   </p>
                 </div>

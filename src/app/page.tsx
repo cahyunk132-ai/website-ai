@@ -113,7 +113,17 @@ export default function ChatPage() {
   const [maxTokens, setMaxTokens] = useState<number>(4096);
   const [systemPrompt, setSystemPrompt] = useState<string>('');
   const [webSearch, setWebSearch] = useState<boolean>(false);
-  const [webSearchSources, setWebSearchSources] = useState<Array<{ title: string; url: string; snippet: string }>>([]);
+  const [webSearchSources, setWebSearchSources] = useState<
+    Array<{
+      title: string;
+      url: string;
+      snippet: string;
+      /** The search engine that delivered the hit (Brave, DuckDuckGo, ...). */
+      provider?: string;
+      /** The publication date of the source, when the engine reports one. */
+      publishedDate?: string;
+    }>
+  >([]);
   const [liveToolOutputs, setLiveToolOutputs] = useState<Array<{ tool: string; target?: string; success: boolean; output: string; durationMs?: number }>>([]);
 
   // Agent Skills & Personas

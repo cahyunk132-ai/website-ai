@@ -43,6 +43,27 @@ vi.mock('@/lib/ai/router', () => ({
   },
 }));
 
+/** The answer of the mocked live web search. */
+const searchState = vi.hoisted(() => ({
+  results: [] as any[],
+  summary: 'Live web results for "test".',
+  provider: 'brave',
+  recency: false,
+}));
+
+vi.mock('@/lib/ai/tools', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/ai/tools')>();
+  return {
+    ...actual,
+    executeWebSearch: vi.fn(async () => ({
+      results: searchState.results,
+      summary: searchState.summary,
+      provider: searchState.provider,
+      recency: searchState.recency,
+    })),
+  };
+});
+
 vi.mock('@/lib/auth', () => ({
   getSessionFromRequest: vi.fn(async () => ({ id: 'user-1', email: 'demo@hyunkai.com' })),
 }));
@@ -143,6 +164,10 @@ describe('POST /api/chat (agent mode)', () => {
     quotaState.limit = 20;
     quotaState.role = 'free';
     routerCalls.length = 0;
+    searchState.results = [];
+    searchState.summary = 'Live web results for "test".';
+    searchState.provider = 'brave';
+    searchState.recency = false;
   });
 
   it('rejects an unauthenticated request', async () => {
@@ -404,6 +429,64 @@ describe('POST /api/chat (agent mode)', () => {
 
     // The free tier sends the last 10 messages of the history.
     expect(routerCalls.at(-1)?.messages).toHaveLength(10);
+  });
+
+  it('grounds the answer in the live search results', async () => {
+    quotaState.role = 'premium3';
+    scriptedAnswers.push('Menurut sumber [1], jawabannya adalah 42.');
+    searchState.results = [
+      {
+        title: 'Berita terbaru',
+        url: 'https://berita.example.com/1',
+        snippet: 'Ringkasan berita.',
+        publishedDate: '2026-10-19',
+        provider: 'Brave Search',
+      },
+    ];
+    searchState.summary =
+      '[1] Berita terbaru\nSource: https://berita.example.com/1\nPublished: 2026-10-19\nRingkasan berita.';
+    searchState.recency = true;
+
+    await POST(
+      buildRequest({
+        messages: [{ role: 'user', content: 'gubernur kaltim sekarang' }],
+        model: 'gemma-2-2b',
+        webSearch: true,
+      })
+    );
+
+    const call = routerCalls.at(-1);
+    const prompt = String(call.messages[call.messages.length - 1].content);
+
+    // The results are injected and the model is told to cite them.
+    expect(prompt).toContain('LIVE WEB SEARCH RESULTS');
+    expect(prompt).toContain('[1] Berita terbaru');
+    expect(prompt).toContain('Published: 2026-10-19');
+    expect(prompt).toContain('cite them as [1]');
+    expect(prompt).toContain('Today is');
+    // The query itself is still part of the prompt.
+    expect(prompt).toContain('gubernur kaltim sekarang');
+  });
+
+  it('warns the model when the live search found nothing', async () => {
+    quotaState.role = 'premium3';
+    scriptedAnswers.push('Jawaban dari pengetahuan umum.');
+    searchState.results = [];
+    searchState.summary = 'No live search results found for query: "test".';
+
+    await POST(
+      buildRequest({
+        messages: [{ role: 'user', content: 'gubernur kaltim sekarang' }],
+        model: 'gemma-2-2b',
+        webSearch: true,
+      })
+    );
+
+    const call = routerCalls.at(-1);
+    const prompt = String(call.messages[call.messages.length - 1].content);
+
+    expect(prompt).toContain('NO RESULTS FOUND');
+    expect(prompt).toContain('may be outdated');
   });
 
   it('keeps the whole history for a premium tier', async () => {
