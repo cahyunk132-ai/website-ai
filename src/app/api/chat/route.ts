@@ -1,7 +1,8 @@
 /**
  * Hyunk AI Hub - Multi-Provider Chat Completion SSE Endpoint
  * Supports Multimodal Vision, Document Attachments, Live Web Search, Custom System Prompts,
- * Parameter Controls (Temperature, Top P, Max Tokens), and Real Agent Mode Tool Execution.
+ * Parameter Controls (Temperature, Top P, Max Tokens), Agent Skills, and a real
+ * multi-step Autonomous Agent Mode with live tool execution.
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -9,9 +10,14 @@ import { z } from 'zod';
 import { defaultRouter } from '@/lib/ai/router';
 import { ProviderId, ChatMessage, FileAttachment } from '@/lib/ai/types';
 import { saveMessage, createConversation, checkAndIncrementUsage } from '@/lib/storage';
-import { executeWebSearch, runAgentTool } from '@/lib/ai/tools';
+import { executeWebSearch } from '@/lib/ai/tools';
 import { getSessionFromRequest } from '@/lib/auth';
 import { buildConversationTitle } from '@/lib/conversationTitle';
+import { buildAgentSystemPrompt, buildPersonaSystemPrompt } from '@/lib/ai/agentProtocol';
+import { runAgent, AgentStepResult } from '@/lib/ai/agent';
+import { AGENT_TOOLS } from '@/lib/ai/tools';
+import { getSkillCatalog, loadSkillContent, loadPinnedSkills } from '@/lib/skills/registry';
+import { ActivatedSkill } from '@/lib/skills/types';
 
 const attachmentSchema = z.object({
   id: z.string(),
@@ -40,25 +46,9 @@ const chatRequestSchema = z.object({
   webSearch: z.boolean().optional(),
   conversationId: z.string().optional(),
   mode: z.enum(['chat', 'agent']).optional().default('chat'),
+  /** Slugs of the skills pinned by the user (manual preset personas). */
+  skills: z.array(z.string().max(80)).max(10).optional(),
 });
-
-const AGENT_SYSTEM_PROMPT = `You are the Hyunk AI Hub Autonomous AI Agent equipped with live tool execution capabilities.
-When answering in Agent Mode, act as an autonomous, self-directed senior engineer and researcher.
-Follow this strict operational pipeline:
-1. FORMULATE REASONING & EXECUTION PLAN:
-   Wrap your initial thoughts, constraints analysis, and numbered execution plan inside <thought> ... </thought>.
-   Be explicit about what steps you will execute and why.
-2. TOOL & ACTION SIMULATIONS:
-   When executing steps, declare tool action blocks:
-   <agent_action tool="tool_name" target="target_item">summary of action/code/query</agent_action>
-   Connected Live Tools:
-   - "web_search": Real-time web queries and fact retrieval
-   - "code_interpreter": Executes JavaScript/Node.js code in a secure sandbox
-   - "calculator": Exact numerical and mathematical evaluation
-   - "fetch_url": Fetches and reads live web pages and documentation
-3. FINAL PRODUCTION DELIVERABLE:
-   Provide the complete, exhaustive, production-grade implementation or answer outside of the thought and action blocks. Do not use placeholders or omit critical logic.
-Always maintain high technical precision, thoroughness, and structured clarity.`;
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60; // 60s timeout for streaming completions on Vercel
@@ -116,27 +106,60 @@ export async function POST(req: NextRequest) {
       webSearch,
       conversationId,
       mode,
+      skills: requestedSkillSlugs,
     } = parsed.data;
 
     const providerParam = provider === 'auto' ? undefined : (provider as ProviderId);
 
+    // ---------------------------------------------------------------------
+    // Skill library: discovery catalog + the personas pinned by the user
+    // ---------------------------------------------------------------------
+    const [catalog, dbPinnedSkills] = await Promise.all([
+      getSkillCatalog(user.id),
+      loadPinnedSkills(user.id),
+    ]);
+
+    const pinnedSlugs = Array.from(
+      new Set([...dbPinnedSkills.map((skill) => skill.slug), ...(requestedSkillSlugs || [])])
+    );
+
+    const pinnedSkills: ActivatedSkill[] = [];
+    for (const slug of pinnedSlugs) {
+      const skill = await loadSkillContent(slug, user.id);
+      if (skill) pinnedSkills.push(skill);
+    }
+
     // Prepare message array
     const preparedMessages: Array<{ role: 'user' | 'assistant' | 'system'; content: any }> = [];
 
-    // Inject custom system prompt if provided
-    if (systemPrompt && systemPrompt.trim()) {
-      preparedMessages.push({
-        role: 'system',
-        content: systemPrompt.trim(),
-      });
-    }
-
-    // Inject Agent Mode system prompt if active
     if (mode === 'agent') {
+      // The agent gets the full protocol, the tool catalogue and the skill
+      // discovery catalog (name + description only, bodies load on demand).
       preparedMessages.push({
         role: 'system',
-        content: AGENT_SYSTEM_PROMPT,
+        content: buildAgentSystemPrompt({
+          catalog,
+          tools: AGENT_TOOLS,
+          pinnedSkills: pinnedSkills.map((skill) => ({
+            name: skill.name,
+            content: skill.content,
+          })),
+          extraInstructions: systemPrompt && systemPrompt.trim()
+            ? `Additional instructions from the user:\n${systemPrompt.trim()}`
+            : undefined,
+        }),
       });
+    } else {
+      // Standard chat: pinned skills act as a manual preset persona.
+      const personaPrompt = buildPersonaSystemPrompt(
+        pinnedSkills.map((skill) => ({ name: skill.name, content: skill.content })),
+        systemPrompt
+      );
+      if (personaPrompt) {
+        preparedMessages.push({ role: 'system', content: personaPrompt });
+      } else if (systemPrompt && systemPrompt.trim()) {
+        preparedMessages.push({ role: 'system', content: systemPrompt.trim() });
+      }
     }
 
     // Process incoming conversation messages & multimodal attachments
@@ -254,10 +277,17 @@ export async function POST(req: NextRequest) {
     const stream = new ReadableStream({
       async start(controller) {
         let fullAssistantContent = '';
+        // In agent mode only the text of the last step is the deliverable: the
+        // previous steps were intermediate reasoning.
+        let currentStepContent = '';
         let finalModel = model;
         let finalProvider: ProviderId = (providerParam || 'radox');
         let wasFallback = false;
         let fallbackNoticeText: string | undefined;
+        let agentSteps: AgentStepResult[] = [];
+        let activatedSkills: ActivatedSkill[] = [];
+        let promptTokens = 0;
+        let completionTokens = 0;
 
         // Inform the client about the conversation that was created for this turn
         if (createdConversation) {
@@ -281,66 +311,149 @@ export async function POST(req: NextRequest) {
         }
 
         try {
-          const result = await defaultRouter.streamChat(
-            {
+          if (mode === 'agent') {
+            // ---------------------------------------------------------------
+            // Autonomous agent: real multi step loop with feedback
+            // ---------------------------------------------------------------
+            const agentResult = await runAgent({
               messages: preparedMessages,
               model,
               provider: providerParam,
               temperature,
               maxTokens,
               signal: req.signal,
-            },
-            async (chunk) => {
-              if (chunk.fallbackNotice) {
-                wasFallback = true;
-                fallbackNoticeText = chunk.fallbackNotice;
+              loadSkill: async (slug) => loadSkillContent(slug, user.id),
+              onStepStart: (step, maxSteps) => {
+                currentStepContent = '';
                 controller.enqueue(
-                  encoder.encode(`event: fallback\ndata: ${JSON.stringify({ notice: chunk.fallbackNotice, provider: chunk.provider, model: chunk.model })}\n\n`)
+                  encoder.encode(
+                    `event: agent_step_start\ndata: ${JSON.stringify({ step, maxSteps })}\n\n`
+                  )
                 );
-              }
-
-              if (chunk.text) {
-                fullAssistantContent += chunk.text;
-                controller.enqueue(
-                  encoder.encode(`data: ${JSON.stringify({ text: chunk.text })}\n\n`)
-                );
-              }
-
-              if (chunk.model) finalModel = chunk.model;
-              if (chunk.provider) finalProvider = chunk.provider;
-            }
-          );
-
-          if (result.isFallback) {
-            wasFallback = true;
-          }
-
-          // If in Agent Mode, scan for generated <agent_action> blocks and execute real tools!
-          if (mode === 'agent' && fullAssistantContent.includes('<agent_action')) {
-            const actionRegex = /<agent_action\s+tool=["']([^"']+)["'](?:\s+target=["']([^"']+)["'])?>([\s\S]*?)<\/agent_action>/gi;
-            let match;
-            while ((match = actionRegex.exec(fullAssistantContent)) !== null) {
-              const toolName = match[1];
-              const target = match[2];
-              const queryOrCode = match[3];
-
-              try {
-                const toolRes = await runAgentTool(toolName, queryOrCode, target);
+              },
+              onText: (text) => {
+                currentStepContent += text;
+                fullAssistantContent += text;
+                controller.enqueue(encoder.encode(`data: ${JSON.stringify({ text })}\n\n`));
+              },
+              onToolOutput: (result) => {
                 controller.enqueue(
                   encoder.encode(
                     `event: tool_output\ndata: ${JSON.stringify({
-                      tool: toolName,
-                      target,
-                      success: toolRes.success,
-                      output: toolRes.output,
-                      durationMs: toolRes.durationMs,
+                      tool: result.tool,
+                      target: result.target,
+                      success: result.success,
+                      output: result.output,
+                      durationMs: result.durationMs,
                     })}\n\n`
                   )
                 );
-              } catch (e) {
-                // Ignore tool execution error
+              },
+              onSkillLoaded: (skill) => {
+                controller.enqueue(
+                  encoder.encode(
+                    `event: skill_loaded\ndata: ${JSON.stringify({
+                      skill: skill.slug,
+                      name: skill.name,
+                      description: skill.description,
+                    })}\n\n`
+                  )
+                );
+              },
+              onStep: (step) => {
+                agentSteps.push(step);
+                controller.enqueue(
+                  encoder.encode(
+                    `event: agent_step\ndata: ${JSON.stringify({
+                      step: step.step,
+                      thought: step.thought,
+                      calls: step.calls.map((call) =>
+                        call.type === 'skill'
+                          ? { type: 'skill', name: call.skill }
+                          : {
+                              type: 'tool',
+                              name: call.tool,
+                              target: call.target,
+                              payload: call.payload,
+                            }
+                      ),
+                      toolResults: step.toolResults.map((result) => ({
+                        tool: result.tool,
+                        target: result.target,
+                        success: result.success,
+                        output: result.output,
+                        durationMs: result.durationMs,
+                      })),
+                      loadedSkills: step.loadedSkills.map((skill) => ({
+                        slug: skill.slug,
+                        name: skill.name,
+                        description: skill.description,
+                      })),
+                      isFinal: step.isFinal,
+                    })}\n\n`
+                  )
+                );
+              },
+              onFallback: (notice) => {
+                wasFallback = true;
+                fallbackNoticeText = notice;
+                controller.enqueue(
+                  encoder.encode(
+                    `event: fallback\ndata: ${JSON.stringify({ notice: notice })}\n\n`
+                  )
+                );
+              },
+            });
+
+            finalModel = agentResult.model;
+            finalProvider = agentResult.provider;
+            if (agentResult.isFallback) wasFallback = true;
+            agentSteps = agentResult.steps;
+            activatedSkills = agentResult.activatedSkills;
+            promptTokens = agentResult.usage.promptTokens;
+            completionTokens = agentResult.usage.completionTokens;
+            // The deliverable is the last step (its reasoning stays attached so
+            // the timeline can be rebuilt when the conversation is reloaded).
+            fullAssistantContent = currentStepContent || agentResult.text;
+          } else {
+            // ---------------------------------------------------------------
+            // Standard chat mode
+            // ---------------------------------------------------------------
+            const result = await defaultRouter.streamChat(
+              {
+                messages: preparedMessages,
+                model,
+                provider: providerParam,
+                temperature,
+                maxTokens,
+                signal: req.signal,
+              },
+              async (chunk) => {
+                if (chunk.fallbackNotice) {
+                  wasFallback = true;
+                  fallbackNoticeText = chunk.fallbackNotice;
+                  controller.enqueue(
+                    encoder.encode(`event: fallback\ndata: ${JSON.stringify({ notice: chunk.fallbackNotice, provider: chunk.provider, model: chunk.model })}\n\n`)
+                  );
+                }
+
+                if (chunk.text) {
+                  fullAssistantContent += chunk.text;
+                  controller.enqueue(
+                    encoder.encode(`data: ${JSON.stringify({ text: chunk.text })}\n\n`)
+                  );
+                }
+
+                if (chunk.model) finalModel = chunk.model;
+                if (chunk.provider) finalProvider = chunk.provider;
               }
+            );
+
+            if (result.isFallback) {
+              wasFallback = true;
             }
+            promptTokens = result.usage?.promptTokens ?? 0;
+            completionTokens = result.usage?.completionTokens ?? 0;
           }
 
           // Save completed assistant message to conversation if conversationId is active
@@ -353,8 +466,8 @@ export async function POST(req: NextRequest) {
               provider: finalProvider,
               isFallback: wasFallback,
               fallbackReason: fallbackNoticeText,
-              tokensPrompt: result.usage?.promptTokens ?? 0,
-              tokensCompletion: result.usage?.completionTokens ?? 0,
+              tokensPrompt: promptTokens,
+              tokensCompletion: completionTokens,
               createdAt: new Date().toISOString(),
             };
             await saveMessage(activeConvId, assistantMessageObj, user.id);
@@ -366,7 +479,16 @@ export async function POST(req: NextRequest) {
                 model: finalModel,
                 provider: finalProvider,
                 isFallback: wasFallback,
-                usage: result.usage,
+                usage: {
+                  promptTokens,
+                  completionTokens,
+                  totalTokens: promptTokens + completionTokens,
+                },
+                steps: agentSteps.length,
+                activatedSkills: activatedSkills.map((skill) => ({
+                  slug: skill.slug,
+                  name: skill.name,
+                })),
               })}\n\n`
             )
           );

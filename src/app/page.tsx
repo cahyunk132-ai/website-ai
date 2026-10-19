@@ -33,6 +33,7 @@ import {
   ChevronDown,
   Edit3,
   Lock,
+  BookOpen,
 } from 'lucide-react';
 import { Sidebar } from '@/components/Sidebar';
 import { ModelSelector } from '@/components/ModelSelector';
@@ -45,8 +46,10 @@ import { ModelParametersModal } from '@/components/ModelParametersModal';
 import { ExportModal } from '@/components/ExportModal';
 import { KeyboardShortcutsModal } from '@/components/KeyboardShortcutsModal';
 import { ConversationSettingsModal } from '@/components/ConversationSettingsModal';
+import { SkillsModal } from '@/components/SkillsModal';
 import { ChatMessage, ModelCapability, ProviderId, FileAttachment } from '@/lib/ai/types';
 import { ConversationSummary, FolderItem } from '@/lib/storage';
+import { AgentStepView, AgentSkillView } from '@/lib/ai/agentEvents';
 import { safeRandomUUID, safeCopyText } from '@/lib/safeUUID';
 import { useAuth } from '@/lib/AuthContext';
 import { AuthModal } from '@/components/AuthModal';
@@ -72,6 +75,12 @@ export default function ChatPage() {
   const [webSearch, setWebSearch] = useState<boolean>(false);
   const [webSearchSources, setWebSearchSources] = useState<Array<{ title: string; url: string; snippet: string }>>([]);
   const [liveToolOutputs, setLiveToolOutputs] = useState<Array<{ tool: string; target?: string; success: boolean; output: string; durationMs?: number }>>([]);
+
+  // Agent Skills & Personas
+  const [pinnedSkills, setPinnedSkills] = useState<string[]>([]);
+  const [agentSteps, setAgentSteps] = useState<AgentStepView[]>([]);
+  const [activatedSkills, setActivatedSkills] = useState<AgentSkillView[]>([]);
+  const [isSkillsOpen, setIsSkillsOpen] = useState(false);
 
   // Theme & Navigation
   const [theme, setTheme] = useState<'dark' | 'light'>('dark');
@@ -179,10 +188,12 @@ export default function ChatPage() {
     if (user) {
       fetchConversations();
       fetchFolders();
+      fetchPinnedSkills();
     } else {
       setConversations([]);
       setMessages([]);
       setActiveConvId(null);
+      setPinnedSkills([]);
     }
   }, [user]);
 
@@ -253,12 +264,30 @@ export default function ChatPage() {
     }
   };
 
+  // Load the pinned agent skills (manual preset personas)
+  const fetchPinnedSkills = async () => {
+    try {
+      const res = await fetch('/api/skills');
+      if (res.ok) {
+        const data = await res.json();
+        const pinned = (data.skills || [])
+          .filter((skill: any) => skill.isPinned)
+          .map((skill: any) => skill.slug);
+        setPinnedSkills(pinned);
+      }
+    } catch {
+      // Fallback
+    }
+  };
+
   const selectConversation = async (convId: string) => {
     setActiveConvId(convId);
     setErrorMessage(null);
     setFallbackAlert(null);
     setWebSearchSources([]);
     setLiveToolOutputs([]);
+    setAgentSteps([]);
+    setActivatedSkills([]);
 
     const activeConv = conversations.find((c) => c.id === convId);
     if (activeConv) {
@@ -366,6 +395,33 @@ export default function ChatPage() {
       );
     } catch {
       // Fallback
+    }
+  };
+
+  /**
+   * Pins or unpins a skill. A pinned skill becomes a manual preset persona and
+   * is injected into every request (agent mode and standard chat mode).
+   */
+  const handleToggleSkillPin = async (slug: string, pinned: boolean) => {
+    setPinnedSkills((prev) =>
+      pinned ? Array.from(new Set([...prev, slug])) : prev.filter((s) => s !== slug)
+    );
+
+    try {
+      const skills = await fetch('/api/skills');
+      if (skills.ok) {
+        const data = await skills.json();
+        const target = (data.skills || []).find((skill: any) => skill.slug === slug);
+        if (target) {
+          await fetch(`/api/skills/${target.id}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ isPinned: pinned }),
+          });
+        }
+      }
+    } catch {
+      // Optimistic state is kept, the next reload reconciles it.
     }
   };
 
@@ -525,6 +581,8 @@ export default function ChatPage() {
 
       setMessages([...newMessages, assistantPlaceholder]);
       setIsStreaming(true);
+      setAgentSteps([]);
+      setActivatedSkills([]);
 
       abortControllerRef.current = new AbortController();
 
@@ -546,6 +604,7 @@ export default function ChatPage() {
           webSearch,
           conversationId: activeConvId || undefined,
           mode,
+          skills: pinnedSkills.length ? pinnedSkills : undefined,
         }),
         signal: abortControllerRef.current.signal,
       });
@@ -563,6 +622,7 @@ export default function ChatPage() {
       const decoder = new TextDecoder('utf-8');
       let buffer = '';
       let accumulatedContent = '';
+      let currentEvent = '';
 
       while (true) {
         const { value, done } = await reader.read();
@@ -576,15 +636,8 @@ export default function ChatPage() {
           const trimmed = line.trim();
           if (!trimmed) continue;
 
-          if (trimmed.startsWith('event: fallback')) {
-            continue;
-          }
-
-          if (trimmed.startsWith('event: web_search')) {
-            continue;
-          }
-
-          if (trimmed.startsWith('event: tool_output')) {
+          if (trimmed.startsWith('event: ')) {
+            currentEvent = trimmed.slice(7).trim();
             continue;
           }
 
@@ -592,6 +645,65 @@ export default function ChatPage() {
             const dataStr = trimmed.slice(6);
             try {
               const parsed = JSON.parse(dataStr);
+
+              // --- Agent step lifecycle -----------------------------------
+              if (currentEvent === 'agent_step_start') {
+                // A new reasoning step begins: the previous step text is replaced
+                // by the answer of the current step.
+                accumulatedContent = '';
+                setAgentSteps((prev) => [
+                  ...prev.filter((s) => s.step !== parsed.step),
+                  { step: parsed.step },
+                ]);
+                setMessages((prev) =>
+                  prev.map((m) => (m.id === assistantMsgId ? { ...m, content: '' } : m))
+                );
+                currentEvent = '';
+                continue;
+              }
+
+              if (currentEvent === 'agent_step') {
+                setAgentSteps((prev) => {
+                  const rest = prev.filter((s) => s.step !== parsed.step);
+                  return [
+                    ...rest,
+                    {
+                      step: parsed.step,
+                      thought: parsed.thought,
+                      calls: parsed.calls,
+                      toolResults: parsed.toolResults,
+                      loadedSkills: parsed.loadedSkills,
+                      isFinal: parsed.isFinal,
+                    },
+                  ].sort((a, b) => a.step - b.step);
+                });
+                if (parsed.loadedSkills?.length) {
+                  setActivatedSkills((prev) => {
+                    const merged = new Map(prev.map((s) => [s.slug, s]));
+                    parsed.loadedSkills.forEach((s: AgentSkillView) => merged.set(s.slug, s));
+                    return Array.from(merged.values());
+                  });
+                }
+                currentEvent = '';
+                continue;
+              }
+
+              if (currentEvent === 'skill_loaded') {
+                setActivatedSkills((prev) => {
+                  if (prev.some((s) => s.slug === parsed.skill)) return prev;
+                  return [
+                    ...prev,
+                    {
+                      slug: parsed.skill,
+                      name: parsed.name,
+                      description: parsed.description,
+                    },
+                  ];
+                });
+                currentEvent = '';
+                continue;
+              }
+
               if (parsed.conversationId) {
                 // The server created a conversation for this turn (first chat of a session).
                 const newConvId: string = parsed.conversationId;
@@ -815,6 +927,25 @@ export default function ChatPage() {
           </div>
 
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+            {/* Agent Skills Button */}
+            <button
+              onClick={() => setIsSkillsOpen(true)}
+              className={`p-2 sm:px-2.5 sm:py-1.5 rounded-xl border text-xs transition flex items-center gap-1.5 ${
+                theme === 'dark'
+                  ? 'bg-slate-900 hover:bg-slate-800 border-slate-800 text-slate-300'
+                  : 'bg-white hover:bg-slate-100 border-slate-300 text-slate-700'
+              }`}
+              title="Agent Skills & Personas"
+            >
+              <BookOpen className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+              <span className="hidden md:inline font-medium">Skills</span>
+              {pinnedSkills.length > 0 && (
+                <span className="text-[9px] font-mono px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/30 font-semibold">
+                  {pinnedSkills.length}
+                </span>
+              )}
+            </button>
+
             {/* Export Button */}
             <button
               onClick={() => setIsExportOpen(true)}
@@ -1105,6 +1236,12 @@ export default function ChatPage() {
                               isStreaming={isStreaming && idx === messages.length - 1}
                               webSearchSources={webSearchSources}
                               liveToolOutputs={liveToolOutputs}
+                              agentSteps={
+                                isStreaming && idx === messages.length - 1 ? agentSteps : []
+                              }
+                              activatedSkills={
+                                isStreaming && idx === messages.length - 1 ? activatedSkills : []
+                              }
                             />
                           ) : (
                             <div className="flex items-center gap-2 py-1 text-slate-400 text-xs font-mono">
@@ -1233,6 +1370,32 @@ export default function ChatPage() {
               </div>
             </div>
 
+            {/* Pinned Skill / Persona chips */}
+            {pinnedSkills.length > 0 && (
+              <div className="flex items-center gap-1.5 flex-wrap mb-1.5">
+                <span className="text-[10px] font-mono uppercase tracking-wider text-slate-500 px-1">
+                  Personas
+                </span>
+                {pinnedSkills.map((slug) => (
+                  <span
+                    key={slug}
+                    className="group inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-lg bg-amber-950/50 text-amber-300 border border-amber-800/40"
+                  >
+                    <BookOpen className="w-2.5 h-2.5" />
+                    <span className="font-mono">{slug}</span>
+                    <button
+                      type="button"
+                      onClick={() => handleToggleSkillPin(slug, false)}
+                      className="ml-0.5 text-amber-500/70 hover:text-rose-400 transition"
+                      title={`Lepas persona ${slug}`}
+                    >
+                      <X className="w-2.5 h-2.5" />
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+
             {/* Input Field Form */}
             <div className="relative flex items-end gap-1.5 sm:gap-2 p-1.5 sm:p-2 rounded-2xl bg-slate-900 border border-slate-800 focus-within:border-cyan-500/70 shadow-lg transition">
               {/* Attachment Picker Button */}
@@ -1352,6 +1515,13 @@ export default function ChatPage() {
       <SettingsModal
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
+      />
+      <SkillsModal
+        isOpen={isSkillsOpen}
+        onClose={() => setIsSkillsOpen(false)}
+        pinnedSlugs={pinnedSkills}
+        onTogglePin={handleToggleSkillPin}
+        onChanged={fetchPinnedSkills}
       />
       <DownloadAppModal
         isOpen={isDownloadOpen}
