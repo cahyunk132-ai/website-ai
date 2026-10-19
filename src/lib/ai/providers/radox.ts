@@ -16,6 +16,7 @@ import {
 import { getModelsByProvider } from '../models';
 import { normalizeProviderError } from '../errors';
 import { recordRequestUsage, recordProviderError, setProviderConfigured } from '../usage';
+import { persistProviderUsage, persistProviderFailure } from '../usageTelemetry';
 import { keyPoolManager, KeyPoolItem } from '../keyPool';
 
 export class RadoxAdapter implements ProviderAdapter {
@@ -118,6 +119,7 @@ export class RadoxAdapter implements ProviderAdapter {
     } catch (err) {
       keyPoolManager.reportKeyError(this.id, keyItem.id, { message: String(err) });
       recordProviderError(this.id, String(err));
+      persistProviderFailure({ provider: this.id, modelId: options.model, errorMessage: String(err) });
       throw normalizeProviderError(err, this.id);
     }
 
@@ -158,6 +160,7 @@ export class RadoxAdapter implements ProviderAdapter {
 
       const normError = normalizeProviderError(new Error(errorMsg), this.id, res.status, res.headers);
       recordProviderError(this.id, normError.message, normError.code === 'QUOTA_EXCEEDED', normError.code === 'RATE_LIMIT_EXCEEDED');
+      persistProviderFailure({ provider: this.id, modelId: options.model, errorMessage: normError.message });
       throw normError;
     }
 
@@ -174,6 +177,8 @@ export class RadoxAdapter implements ProviderAdapter {
       completionTokens,
       isOfficialReport: Boolean(data.usage),
     });
+
+    persistProviderUsage({ provider: this.id, modelId: options.model, promptTokens, completionTokens });
 
     return {
       text: content,
@@ -226,6 +231,7 @@ export class RadoxAdapter implements ProviderAdapter {
     } catch (err) {
       keyPoolManager.reportKeyError(this.id, keyItem.id, { message: String(err) });
       recordProviderError(this.id, String(err));
+      persistProviderFailure({ provider: this.id, modelId: options.model, errorMessage: String(err) });
       throw normalizeProviderError(err, this.id);
     }
 
@@ -266,6 +272,7 @@ export class RadoxAdapter implements ProviderAdapter {
 
       const normError = normalizeProviderError(new Error(errorMsg), this.id, res.status, res.headers);
       recordProviderError(this.id, normError.message, normError.code === 'QUOTA_EXCEEDED', normError.code === 'RATE_LIMIT_EXCEEDED');
+      persistProviderFailure({ provider: this.id, modelId: options.model, errorMessage: normError.message });
       throw normError;
     }
 
@@ -327,6 +334,7 @@ export class RadoxAdapter implements ProviderAdapter {
       }
     } catch (err) {
       recordProviderError(this.id, String(err));
+      persistProviderFailure({ provider: this.id, modelId: options.model, errorMessage: String(err) });
       throw normalizeProviderError(err, this.id);
     }
 
@@ -337,6 +345,8 @@ export class RadoxAdapter implements ProviderAdapter {
       completionTokens: completionTokens || Math.ceil(accumulatedText.length / 4),
       isOfficialReport: promptTokens > 0,
     });
+
+    persistProviderUsage({ provider: this.id, modelId: options.model, promptTokens, completionTokens });
 
     return {
       text: accumulatedText,
