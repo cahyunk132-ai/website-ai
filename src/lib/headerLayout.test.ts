@@ -8,8 +8,8 @@ const modelSelector = readFileSync(
   join(process.cwd(), 'src', 'components', 'ModelSelector.tsx'),
   'utf8'
 );
-const overflowMenu = readFileSync(
-  join(process.cwd(), 'src', 'components', 'HeaderOverflowMenu.tsx'),
+const authModal = readFileSync(
+  join(process.cwd(), 'src', 'components', 'AuthModal.tsx'),
   'utf8'
 );
 
@@ -19,7 +19,7 @@ const stripComments = (source: string) => source.replace(/\/\/[^\n]*/g, '');
 const headerMarkup = page.slice(page.indexOf('<header'), page.indexOf('</header>'));
 
 /**
- * Regression tests for the two problems reported from the laptop screenshot:
+ * Regression tests for the problems reported from the laptop screenshots:
  *
  *  1. "tombolnya tabrakan" - the header toolbar buttons overlapped each other
  *     and the model selector was squeezed down to a couple of characters.
@@ -28,53 +28,50 @@ const headerMarkup = page.slice(page.indexOf('<header'), page.indexOf('</header>
  *     `md:w-0` while the base classes also contained `md:w-72`. In the
  *     generated stylesheet `.md:w-72` is emitted AFTER `.md:w-0`, so the
  *     sidebar kept its full width and the toggle looked broken.
+ *  3. "tombol morenya merepotkan" - the "More" dropdown hid the actions
+ *     behind an extra click, so the buttons are back in the toolbar, this
+ *     time as compact icon buttons that can never overlap.
  */
 describe('header toolbar layout', () => {
-  it('renders the overflow menu instead of a long row of buttons', () => {
-    expect(page).toMatch(/<HeaderOverflowMenu\s+items=\{headerOverflowItems\}/);
-    expect(overflowMenu).toMatch(/export const HeaderOverflowMenu/);
+  it('keeps every action directly in the toolbar', () => {
+    // The "More" menu is gone, the actions are one click away again.
+    expect(page).not.toMatch(/HeaderOverflowMenu/);
+    expect(page).not.toMatch(/headerOverflowItems/);
   });
 
-  it('keeps only a few buttons visible in the toolbar', () => {
-    // The right hand group of the header starts with the last `shrink-0`
-    // wrapper and ends with the closing header tag.
-    const rightGroup = headerMarkup.slice(headerMarkup.lastIndexOf('shrink-0">'));
-    const visibleLabels = [
-      'Skills',
-      'Tools',
-      'Palette',
-      'Memory',
-      'Jadwal',
-      'Share',
-      'Sampah',
-      'Export',
-      'Download',
-      'Key Pool',
-    ].filter((label) => rightGroup.includes(`>${label}</span>`));
+  it('shows all ten toolbar actions', () => {
+    const actions = [
+      'Agent Skills & Personas',
+      'Tool Runner - jalankan tool langsung',
+      'Command Palette (Ctrl/Cmd + K)',
+      'AI Memory - fakta yang diingat AI antar percakapan',
+      'Jadwal Otomatis - prompt cron',
+      'Bagikan percakapan (tautan publik)',
+      'Sampah - pulihkan percakapan yang dihapus',
+      'Export Conversation (PDF / Markdown / JSON)',
+      'Download Windows & Mobile Apps',
+      'Manage API Key Pool',
+    ];
 
-    // Only Skills, Tools and Palette may stay in the toolbar.
-    expect(visibleLabels).toEqual(['Skills', 'Tools', 'Palette']);
+    for (const title of actions) {
+      expect(headerMarkup).toContain(`title="${title}"`);
+    }
   });
 
-  it('moves the secondary actions into the overflow menu', () => {
-    for (const id of [
-      'new-chat',
-      'search',
-      'memory',
-      'schedules',
-      'share',
-      'trash',
-      'export',
-      'download',
-      'keys',
-      'dashboard',
-      'parameters',
-      'theme',
-      'notifications',
-      'shortcuts',
-    ]) {
+  it('keeps the secondary actions in the command palette as well', () => {
+    for (const id of ['download-app', 'open-keys', 'open-parameters', 'shortcuts']) {
       expect(page).toMatch(new RegExp(`id: '${id}'`));
     }
+  });
+
+  it('uses compact icon buttons so the row can never overlap', () => {
+    // The shared class of the toolbar buttons: no label, only the tooltip.
+    expect(page).toMatch(/const toolbarButtonClass = `p-2 rounded-xl border/);
+    // Only the three most used buttons still carry a text label.
+    const labels = ['Skills', 'Tools', 'Palette'].filter((label) =>
+      headerMarkup.includes(`>${label}</span>`)
+    );
+    expect(labels).toEqual(['Skills', 'Tools', 'Palette']);
   });
 
   it('lets the header scroll instead of overlapping the buttons', () => {
@@ -95,6 +92,14 @@ describe('header toolbar layout', () => {
   });
 });
 
+describe('quick login buttons', () => {
+  it('only offers the demo account', () => {
+    expect(authModal).toMatch(/Akun Demo/);
+    expect(authModal).not.toMatch(/Akun Admin/);
+    expect(authModal).not.toMatch(/admin@hyunkai\.com/);
+  });
+});
+
 describe('sidebar toggle', () => {
   it('hides the sidebar on a desktop when it is closed', () => {
     // `md:w-0` loses against `md:w-72` in the generated stylesheet, the
@@ -111,8 +116,13 @@ describe('sidebar toggle', () => {
   });
 
   it('toggles the sidebar from the burger button', () => {
-    const burger = page.slice(page.indexOf('Sembunyikan sidebar') - 900, page.indexOf('Sembunyikan sidebar'));
+    const burger = page.slice(
+      page.indexOf('Sembunyikan sidebar') - 900,
+      page.indexOf('Sembunyikan sidebar')
+    );
     expect(burger).toMatch(/onClick=\{\(\) => setIsSidebarOpen\(!isSidebarOpen\)\}/);
-    expect(page).toMatch(/aria-label=\{isSidebarOpen \? 'Sembunyikan sidebar' : 'Tampilkan sidebar'\}/);
+    expect(page).toMatch(
+      /aria-label=\{isSidebarOpen \? 'Sembunyikan sidebar' : 'Tampilkan sidebar'\}/
+    );
   });
 });
