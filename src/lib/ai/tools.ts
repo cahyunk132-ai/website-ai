@@ -7,6 +7,8 @@
  */
 
 import vm from 'vm';
+import { promises as fs } from 'fs';
+import path from 'path';
 import { AgentToolCall, AgentToolDescriptor } from './agentProtocol';
 import { searchWeb, WebSearchResultItem, WebSearchResponse } from './webSearch';
 import { scanWebsiteSecurity, resolveHost, SecurityReport } from './tools/security';
@@ -136,6 +138,13 @@ export const AGENT_TOOLS: AgentToolDescriptor[] = [
     description:
       'Compute the next execution times of a 5 field cron expression. Use it to explain a schedule, to verify a crontab line or to answer when a job will run next.',
     parameters: 'JSON object: {"expression":"0 9 * * 1-5","count":5}',
+  },
+  {
+    name: 'write_file',
+    description:
+      'Create or overwrite a file in the user workspace. Use it to generate code files (.js, .ts, .py, .txt, .json, etc.), configuration files, documentation, or any text-based file the user needs. The file is saved to the server filesystem and can be downloaded by the user. Returns the file path and size.',
+    parameters:
+      'JSON object: {"path":"filename.txt","content":"file content here"} - path is relative to the user workspace, content is the full file text',
   },
   {
     name: 'text_diff',
@@ -359,6 +368,70 @@ export async function executeCodeInterpreter(
     output += `Result: ${result.returned}`;
   }
   return output || 'Code executed successfully (no stdout returned).';
+}
+
+// ---------------------------------------------------------------------------
+// File Writer (create/overwrite files in the user workspace)
+// ---------------------------------------------------------------------------
+
+const WORKSPACE_DIR = process.env.USER_WORKSPACE_DIR || '/tmp/hyunk-workspace';
+
+async function executeWriteFile(args: {
+  path?: string;
+  content?: string;
+}): Promise<{ output: string; data?: any }> {
+  const filePath = typeof args.path === 'string' ? args.path : '';
+  const content = typeof args.content === 'string' ? args.content : '';
+
+  if (!filePath) {
+    return {
+      output: 'Error: File path is required. Provide a "path" parameter with the filename (e.g., "script.js").',
+    };
+  }
+
+  if (!content) {
+    return {
+      output: 'Error: File content is required. Provide a "content" parameter with the file text.',
+    };
+  }
+
+  // Sanitize the path to prevent directory traversal attacks
+  const sanitizedPath = path.basename(filePath);
+  if (sanitizedPath !== filePath) {
+    return {
+      output: `Error: Invalid file path "${filePath}". Only filenames are allowed (no directories or special characters).`,
+    };
+  }
+
+  // Create workspace directory if it doesn't exist
+  try {
+    await fs.mkdir(WORKSPACE_DIR, { recursive: true });
+  } catch (err: any) {
+    return {
+      output: `Error: Failed to create workspace directory: ${err.message}`,
+    };
+  }
+
+  // Write the file
+  const fullPath = path.join(WORKSPACE_DIR, sanitizedPath);
+  try {
+    await fs.writeFile(fullPath, content, 'utf-8');
+    const stats = await fs.stat(fullPath);
+    
+    return {
+      output: `File created successfully: ${sanitizedPath} (${stats.size} bytes)`,
+      data: {
+        path: sanitizedPath,
+        fullPath: fullPath,
+        size: stats.size,
+        createdAt: new Date().toISOString(),
+      },
+    };
+  } catch (err: any) {
+    return {
+      output: `Error: Failed to write file: ${err.message}`,
+    };
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -1116,6 +1189,10 @@ export async function executeAgentToolCall(call: AgentToolCall): Promise<ToolExe
       output = executeDateTime(
         typeof args.timezone === 'string' ? args.timezone : call.target
       );
+    } else if (normalized.includes('write_file') || normalized.includes('create_file')) {
+      const result = await executeWriteFile(args);
+      output = result.output;
+      data = result.data;
     } else {
       output = await executeCodeInterpreter(input, 'javascript');
     }

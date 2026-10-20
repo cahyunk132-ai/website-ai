@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
-import { ChevronDown, Sparkles, Check, Search, Zap, ShieldCheck, Lock, Sun } from 'lucide-react';
+import { ChevronDown, Sparkles, Check, Search, Zap, ShieldCheck, Lock, Sun, Eye } from 'lucide-react';
 import { ModelCapability, ProviderId } from '@/lib/ai/types';
 import { Tier, tierLabel } from '@/lib/ai/tiers';
 
@@ -270,6 +270,12 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
                       )}
 
                       <div className="flex flex-wrap items-center gap-1">
+                        {model.supportsVision && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded border bg-purple-950/70 text-purple-300 border-purple-800/60 font-medium flex items-center gap-0.5">
+                            <Eye className="w-2.5 h-2.5" />
+                            Vision
+                          </span>
+                        )}
                         {model.provider === 'radox' && (
                           <span className="text-[10px] px-1.5 py-0.5 rounded border bg-amber-950/70 text-amber-300 border-amber-800/60 font-medium">
                             ☀️ Siang Hari
