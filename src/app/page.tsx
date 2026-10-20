@@ -52,6 +52,7 @@ import {
   PanelLeftOpen,
   HardHat,
 } from 'lucide-react';
+import { downloadGeneratedFile } from '@/lib/downloadGeneratedFile';
 import { Sidebar } from '@/components/Sidebar';
 import { ModelSelector } from '@/components/ModelSelector';
 import { MarkdownRenderer } from '@/components/ui/MarkdownRenderer';
@@ -1154,6 +1155,16 @@ export default function ChatPage() {
             try {
               const parsed = JSON.parse(dataStr);
 
+              if (currentEvent === 'artifact') {
+                if (parsed.type === 'document' && typeof parsed.url === 'string' &&
+                    /^data:(application\/pdf|text\/plain;charset=utf-8);base64,/.test(parsed.url)) {
+                  setMessages((prev) => prev.map((m) => m.id === assistantMsgId
+                    ? { ...m, attachments: [...(m.attachments || []), parsed as FileAttachment] } : m));
+                }
+                currentEvent = '';
+                continue;
+              }
+
               // --- Agent step lifecycle -----------------------------------
               if (currentEvent === 'agent_step_start') {
                 // A new reasoning step begins: the previous step text is replaced
@@ -2107,6 +2118,16 @@ export default function ChatPage() {
                               key={att.id}
                               className="flex items-center gap-2 p-2 rounded-xl bg-slate-900 border border-slate-800 text-xs text-slate-200"
                             >
+                              {!isUser && att.url?.startsWith('data:') && (
+                                <button
+                                  type="button"
+                                  className="text-cyan-300 hover:text-cyan-100 underline"
+                                  onClick={() => downloadGeneratedFile(att)}
+                                  aria-label={`Unduh ${att.name}`}
+                                >
+                                  <Download className="w-4 h-4 inline mr-1" />Unduh
+                                </button>
+                              )}
                               <FileText className="w-4 h-4 text-cyan-400" />
                               <span className="truncate max-w-[150px]">{att.name}</span>
                               <span className="text-[10px] text-slate-500 font-mono">
