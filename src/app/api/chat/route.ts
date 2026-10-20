@@ -132,6 +132,42 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // 1.5 Vision auto-switch: if images are attached but the selected model
+    //     doesn't support vision, switch to a vision-capable model.
+    const hasImageAttachments = messages.some((msg) =>
+      msg.attachments?.some((a) => a.type === 'image' && a.url)
+    );
+
+    let effectiveModel = model;
+    let effectiveProvider = providerParam;
+    let visionSwitchNotice: string | undefined;
+
+    if (hasImageAttachments && selectedModel && !selectedModel.supportsVision) {
+      // Find a vision-capable model in the same provider, or fallback to any vision model
+      const { getModelsByProvider } = await import('@/lib/ai/models');
+      const providerModels = effectiveProvider
+        ? getModelsByProvider(effectiveProvider)
+        : [];
+      
+      let visionModel = providerModels.find(
+        (m) => m.supportsVision && canAccessTier(role, m.minTier)
+      );
+
+      // If no vision model in the same provider, try any provider
+      if (!visionModel) {
+        const allModels = await import('@/lib/ai/models').then((m) => m.getModelsByProvider('radox'));
+        visionModel = allModels.find(
+          (m) => m.supportsVision && canAccessTier(role, m.minTier)
+        );
+      }
+
+      if (visionModel) {
+        visionSwitchNotice = `Model "${selectedModel.name}" tidak support vision. Auto-switch ke "${visionModel.name}" untuk memproses gambar.`;
+        effectiveModel = visionModel.id;
+        effectiveProvider = visionModel.provider;
+      }
+    }
+
     // 2. Daily quota of the tier. Malformed requests are rejected before they
     //    are counted.
     const usage = await checkAndIncrementUsage(user.id, tierConfig.dailyRequestLimit);
@@ -392,8 +428,8 @@ export async function POST(req: NextRequest) {
         // In agent mode only the text of the last step is the deliverable: the
         // previous steps were intermediate reasoning.
         let currentStepContent = '';
-        let finalModel = model;
-        let finalProvider: ProviderId = (providerParam || 'radox');
+        let finalModel = effectiveModel;
+        let finalProvider: ProviderId = (effectiveProvider || 'radox');
         let wasFallback = false;
         let fallbackNoticeText: string | undefined;
         let agentSteps: AgentStepResult[] = [];
@@ -430,10 +466,17 @@ export async function POST(req: NextRequest) {
             // ---------------------------------------------------------------
             // Autonomous agent: real multi step loop with feedback
             // ---------------------------------------------------------------
+            // Emit vision switch notice if applicable
+            if (visionSwitchNotice) {
+              controller.enqueue(
+                encoder.encode(`event: notice\\ndata: ${JSON.stringify({ type: 'vision_switch', message: visionSwitchNotice })}\\n\\n`)
+              );
+            }
+
             const agentResult = await runAgent({
               messages: preparedMessages,
-              model,
-              provider: providerParam,
+              model: effectiveModel,
+              provider: effectiveProvider,
               temperature,
               maxTokens: effectiveMaxTokens,
               maxTier: tier,
@@ -535,11 +578,18 @@ export async function POST(req: NextRequest) {
             // ---------------------------------------------------------------
             // Standard chat mode
             // ---------------------------------------------------------------
+            // Emit vision switch notice if applicable
+            if (visionSwitchNotice) {
+              controller.enqueue(
+                encoder.encode(`event: notice\\ndata: ${JSON.stringify({ type: 'vision_switch', message: visionSwitchNotice })}\\n\\n`)
+              );
+            }
+
             const result = await defaultRouter.streamChat(
               {
                 messages: preparedMessages,
-                model,
-                provider: providerParam,
+                model: effectiveModel,
+                provider: effectiveProvider,
                 temperature,
                 maxTokens: effectiveMaxTokens,
                 maxTier: tier,
