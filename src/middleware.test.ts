@@ -58,3 +58,36 @@ describe('Middleware - API route protection', () => {
     }
   });
 });
+
+describe('Middleware - security hardening', () => {
+  it('keeps public pages and security contact accessible without a session', async () => {
+    for (const path of ['/', '/share/example', '/.well-known/security.txt']) {
+      const response = await middleware(buildRequest(path));
+      expect(response.status).toBe(200);
+      expect(response.headers.get('content-security-policy')).toContain("object-src 'none'");
+      expect(response.headers.get('cross-origin-opener-policy')).toBe('same-origin');
+    }
+  });
+
+  it('adds headers even to authentication errors', async () => {
+    const response = await middleware(buildRequest('/api/chat'));
+    expect(response.status).toBe(401);
+    expect(response.headers.get('content-security-policy')).toContain("frame-ancestors 'none'");
+    expect(response.headers.get('cross-origin-resource-policy')).toBe('same-origin');
+  });
+
+  it('does not grant CORS to arbitrary origins', async () => {
+    const response = await middleware(new NextRequest('https://example.com/api/chat', {
+      headers: { origin: 'https://attacker.example' },
+    }));
+    expect(response.status).toBe(401);
+    expect(response.headers.has('access-control-allow-origin')).toBe(false);
+  });
+
+  it('returns 404 for sensitive probes rather than requiring authentication', async () => {
+    for (const path of ['/phpinfo.php', '/wp-config.php.bak', '/.aws/credentials', '/.git/config', '/.env.local']) {
+      const response = await middleware(buildRequest(path));
+      expect(response.status).toBe(404);
+    }
+  });
+});
