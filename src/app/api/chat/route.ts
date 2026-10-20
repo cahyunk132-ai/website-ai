@@ -25,6 +25,7 @@ import { buildConversationTitle } from '@/lib/conversationTitle';
 import { buildAgentSystemPrompt, buildPersonaSystemPrompt } from '@/lib/ai/agentProtocol';
 import { runAgent, AgentStepResult } from '@/lib/ai/agent';
 import { AGENT_TOOLS } from '@/lib/ai/tools';
+import { isFileCreationRequest } from '@/lib/ai/generatedFiles';
 import { getSkillCatalog, loadSkillContent, loadPinnedSkills } from '@/lib/skills/registry';
 import { listMemories, buildMemoryPrompt } from '@/lib/featureStorage';
 import { ActivatedSkill } from '@/lib/skills/types';
@@ -105,9 +106,12 @@ export async function POST(req: NextRequest) {
       systemPrompt,
       webSearch,
       conversationId,
-      mode,
+      mode: requestedMode,
       skills: requestedSkillSlugs,
     } = parsed.data;
+
+    const latestUserText = [...messages].reverse().find((message) => message.role === 'user')?.content || '';
+    const mode = requestedMode === 'agent' || isFileCreationRequest(latestUserText) ? 'agent' : 'chat';
 
     const providerParam = provider === 'auto' ? undefined : (provider as ProviderId);
 
@@ -428,6 +432,7 @@ export async function POST(req: NextRequest) {
         // In agent mode only the text of the last step is the deliverable: the
         // previous steps were intermediate reasoning.
         let currentStepContent = '';
+        const generatedAttachments: FileAttachment[] = [];
         let finalModel = effectiveModel;
         let finalProvider: ProviderId = (effectiveProvider || 'radox');
         let wasFallback = false;
@@ -496,6 +501,11 @@ export async function POST(req: NextRequest) {
                 controller.enqueue(encoder.encode(`data: ${JSON.stringify({ text })}\n\n`));
               },
               onToolOutput: (result) => {
+                if (result.success && result.data?.artifact && generatedAttachments.length < 18) {
+                  const artifact = result.data.artifact as FileAttachment;
+                  generatedAttachments.push(artifact);
+                  controller.enqueue(encoder.encode(`event: artifact\ndata: ${JSON.stringify(artifact)}\n\n`));
+                }
                 controller.enqueue(
                   encoder.encode(
                     `event: tool_output\ndata: ${JSON.stringify({
@@ -629,6 +639,7 @@ export async function POST(req: NextRequest) {
               id: crypto.randomUUID(),
               role: 'assistant',
               content: fullAssistantContent,
+              attachments: generatedAttachments.length ? generatedAttachments : undefined,
               model: finalModel,
               provider: finalProvider,
               isFallback: wasFallback,

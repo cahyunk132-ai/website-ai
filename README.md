@@ -431,3 +431,24 @@ Run `supabase/migrations/20261025000000_provider_telemetry.sql` to create the te
 - ✅ `next build` succeeds
 - ✅ Dashboard now shows real usage counts, token balances, and last-success timestamps
 
+
+### Downloadable AI-generated files
+
+The `write_file` agent tool now returns file bytes to the chat as a downloadable
+attachment instead of saving to a shared `/tmp` directory. PDF filenames produce
+real, paginated PDFs from the supplied document text; text/code filenames preserve
+the supplied UTF-8 source. Each file is limited to 1 MiB. PDF output currently uses
+Helvetica for Indonesian/Latin text; unsupported glyphs fail explicitly. Binary
+Office formats (DOCX/XLSX) and directory/filesystem operations are not supported.
+
+Explicit file-creation requests such as “Buatkan file PDF panduan keamanan digital”
+use the tool loop even from Chat mode. If a phrasing is not detected, use Agent
+Mode. The model still needs to call the tool successfully before a download exists;
+the system prompt instructs it not to claim success or return generator code instead.
+
+**Deployment:** apply `supabase/migrations/20261026000000_message_attachments.sql`
+before deploying. The new `messages.attachments` JSONB column stores attachments
+under the existing message access rules so downloads survive conversation reloads.
+Without this migration, persistence of messages with attachments is not reliable.
+Files are streamed inline and stored in message JSON, so monitor database and
+network growth; use private object storage for larger production file workloads.

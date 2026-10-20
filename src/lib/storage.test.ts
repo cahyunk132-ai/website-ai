@@ -78,6 +78,7 @@ import {
   checkAndIncrementUsage,
   searchConversations,
   saveMessage,
+  getConversationMessages,
   addProviderApiKey,
   DAILY_REQUEST_LIMIT,
 } from './storage';
@@ -85,6 +86,12 @@ import {
 describe('Storage layer (Supabase backed)', () => {
   beforeEach(() => {
     mockState.client = createFakeClient({});
+  });
+
+  it('restores downloadable attachments with messages after reopening a conversation', async () => {
+    const attachment = { id: 'file1', name: 'guide.pdf', type: 'document', mimeType: 'application/pdf', size: 5, url: 'data:application/pdf;base64,JVBERi0=' };
+    mockState.client = createFakeClient({ tables: { messages: { data: [{ id: 'm1', role: 'assistant', content: 'Ready', attachments: [attachment] }], error: null } } });
+    expect((await getConversationMessages('c1'))[0].attachments).toEqual([attachment]);
   });
 
   it('maps folder, system prompt and temperature when listing conversations', async () => {
@@ -392,6 +399,7 @@ describe('Storage layer (Supabase backed)', () => {
         id: 'm1',
         role: 'assistant',
         content: 'hello',
+        attachments: [{ id: 'f1', name: 'guide.txt', type: 'document', mimeType: 'text/plain', size: 1, url: 'data:text/plain;charset=utf-8;base64,YQ==' }],
         tokensPrompt: 120,
         tokensCompletion: 45,
       },
@@ -399,6 +407,7 @@ describe('Storage layer (Supabase backed)', () => {
     );
 
     expect(inserts).toHaveLength(1);
+    expect(inserts[0].attachments[0].name).toBe('guide.txt');
     expect(inserts[0].tokens_prompt).toBe(120);
     expect(inserts[0].tokens_completion).toBe(45);
   });

@@ -7,8 +7,7 @@
  */
 
 import vm from 'vm';
-import { promises as fs } from 'fs';
-import path from 'path';
+import { createGeneratedFile } from './generatedFiles';
 import { AgentToolCall, AgentToolDescriptor } from './agentProtocol';
 import { searchWeb, WebSearchResultItem, WebSearchResponse } from './webSearch';
 import { scanWebsiteSecurity, resolveHost, SecurityReport } from './tools/security';
@@ -142,9 +141,9 @@ export const AGENT_TOOLS: AgentToolDescriptor[] = [
   {
     name: 'write_file',
     description:
-      'Create or overwrite a file in the user workspace. Use it to generate code files (.js, .ts, .py, .txt, .json, etc.), configuration files, documentation, or any text-based file the user needs. The file is saved to the server filesystem and can be downloaded by the user. Returns the file path and size.',
+      'Create an actual downloadable file. For PDF, use a .pdf filename and the full document text as content; the platform renders a real paginated PDF. For text/code, provide full source content. Call once for each file. Max 1 MiB per file. Not a filesystem or code execution tool. Do not provide generator code when the user wants the file.',
     parameters:
-      'JSON object: {"path":"filename.txt","content":"file content here"} - path is relative to the user workspace, content is the full file text',
+      'JSON object: {"path":"filename.txt","content":"file content here"} - path is a filename only (no directories); content is the full document text or source code',
   },
   {
     name: 'text_diff',
@@ -374,64 +373,12 @@ export async function executeCodeInterpreter(
 // File Writer (create/overwrite files in the user workspace)
 // ---------------------------------------------------------------------------
 
-const WORKSPACE_DIR = process.env.USER_WORKSPACE_DIR || '/tmp/hyunk-workspace';
-
-async function executeWriteFile(args: {
-  path?: string;
-  content?: string;
-}): Promise<{ output: string; data?: any }> {
-  const filePath = typeof args.path === 'string' ? args.path : '';
-  const content = typeof args.content === 'string' ? args.content : '';
-
-  if (!filePath) {
-    return {
-      output: 'Error: File path is required. Provide a "path" parameter with the filename (e.g., "script.js").',
-    };
-  }
-
-  if (!content) {
-    return {
-      output: 'Error: File content is required. Provide a "content" parameter with the file text.',
-    };
-  }
-
-  // Sanitize the path to prevent directory traversal attacks
-  const sanitizedPath = path.basename(filePath);
-  if (sanitizedPath !== filePath) {
-    return {
-      output: `Error: Invalid file path "${filePath}". Only filenames are allowed (no directories or special characters).`,
-    };
-  }
-
-  // Create workspace directory if it doesn't exist
-  try {
-    await fs.mkdir(WORKSPACE_DIR, { recursive: true });
-  } catch (err: any) {
-    return {
-      output: `Error: Failed to create workspace directory: ${err.message}`,
-    };
-  }
-
-  // Write the file
-  const fullPath = path.join(WORKSPACE_DIR, sanitizedPath);
-  try {
-    await fs.writeFile(fullPath, content, 'utf-8');
-    const stats = await fs.stat(fullPath);
-    
-    return {
-      output: `File created successfully: ${sanitizedPath} (${stats.size} bytes)`,
-      data: {
-        path: sanitizedPath,
-        fullPath: fullPath,
-        size: stats.size,
-        createdAt: new Date().toISOString(),
-      },
-    };
-  } catch (err: any) {
-    return {
-      output: `Error: Failed to write file: ${err.message}`,
-    };
-  }
+async function executeWriteFile(args: { path?: string; content?: string }): Promise<{ output: string; data: any }> {
+  const artifact = await createGeneratedFile(args);
+  return {
+    output: `File ready for download: ${artifact.name} (${artifact.size} bytes). The platform displays a download button. Do not claim you cannot send files, do not provide generator code instead, and do not invent a URL.`,
+    data: { artifact },
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -1189,7 +1136,7 @@ export async function executeAgentToolCall(call: AgentToolCall): Promise<ToolExe
       output = executeDateTime(
         typeof args.timezone === 'string' ? args.timezone : call.target
       );
-    } else if (normalized.includes('write_file') || normalized.includes('create_file')) {
+    } else if (normalized === 'write_file' || normalized === 'create_file') {
       const result = await executeWriteFile(args);
       output = result.output;
       data = result.data;

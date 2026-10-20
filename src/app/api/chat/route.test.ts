@@ -69,7 +69,7 @@ vi.mock('@/lib/auth', () => ({
 }));
 
 vi.mock('@/lib/storage', () => ({
-  saveMessage: async () => undefined,
+  saveMessage: vi.fn(async () => undefined),
   createConversation: async (title: string) => ({ id: 'conv-1', title }),
   checkAndIncrementUsage: async () => ({
     allowed: quotaState.allowed,
@@ -215,6 +215,36 @@ describe('POST /api/chat (agent mode)', () => {
     const done = events.find((e) => e.event === 'done')!;
     expect(done.data.steps).toBe(2);
     expect(done.data.usage.totalTokens).toBe(38);
+  });
+
+  it('creates and streams a real PDF download from ordinary chat and saves the attachment', async () => {
+    scriptedAnswers.push('<agent_action tool="write_file">{"path":"NIM_Nama_KeamananKomunikasiDigital.pdf","content":"Panduan keamanan komunikasi digital"}</agent_action>');
+    scriptedAnswers.push('File PDF tersedia melalui tombol Unduh.');
+    const res = await POST(buildRequest({
+      messages: [{ role: 'user', content: 'Buatkan file PDF panduan keamanan komunikasi digital' }],
+      model: 'test-model', mode: 'chat',
+    }));
+    const events = await readEvents(res);
+    const artifact = events.find((event) => event.event === 'artifact')?.data;
+    expect(artifact.name).toBe('NIM_Nama_KeamananKomunikasiDigital.pdf');
+    expect(Buffer.from(artifact.url.split(',')[1], 'base64').subarray(0, 5).toString()).toBe('%PDF-');
+    expect(events.find((event) => event.event === 'tool_output')?.data.success).toBe(true);
+    const { saveMessage } = await import('@/lib/storage');
+    expect(saveMessage).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({
+      role: 'assistant', attachments: [artifact],
+    }), 'user-1');
+    expect(routerCalls[0].messages.some((message: any) => message.role === 'system' && message.content.includes('write_file'))).toBe(true);
+  });
+
+  it('never emits a download artifact for a failed file operation', async () => {
+    scriptedAnswers.push('<agent_action tool="write_file">{"path":"../guide.pdf","content":"test"}</agent_action>');
+    scriptedAnswers.push('Nama file tidak valid.');
+    const res = await POST(buildRequest({
+      messages: [{ role: 'user', content: 'Buatkan file PDF' }], model: 'test-model', mode: 'chat',
+    }));
+    const events = await readEvents(res);
+    expect(events.some((event) => event.event === 'artifact')).toBe(false);
+    expect(events.find((event) => event.event === 'tool_output')?.data.success).toBe(false);
   });
 
   it('emits a skill_loaded event when the agent loads a skill', async () => {
