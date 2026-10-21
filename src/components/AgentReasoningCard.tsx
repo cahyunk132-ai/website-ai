@@ -37,6 +37,7 @@ export interface ToolAction {
   content: string;
   output?: string;
   durationMs?: number;
+  success?: boolean;
 }
 
 export interface WebSearchSource {
@@ -195,12 +196,14 @@ export const AgentReasoningCard: React.FC<AgentReasoningCardProps> = ({
     if (existing) {
       existing.output = lt.output;
       existing.durationMs = lt.durationMs;
+      existing.success = lt.success;
     } else {
       allActions.push({
         tool: lt.tool,
         target: lt.target,
         content: `Executed tool: ${lt.tool}`,
         output: lt.output,
+        success: lt.success,
         durationMs: lt.durationMs,
       });
     }
@@ -456,7 +459,7 @@ export const AgentReasoningCard: React.FC<AgentReasoningCardProps> = ({
                 Agent Reasoning & Execution Plan
               </span>
               <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-violet-950 text-violet-300 border border-violet-800/50">
-                {isStreaming ? 'Reasoning Active...' : 'Plan Verified'}
+                {isStreaming ? 'Reasoning Active...' : 'Catatan proses'}
               </span>
             </div>
 
@@ -476,7 +479,7 @@ export const AgentReasoningCard: React.FC<AgentReasoningCardProps> = ({
             <div className="p-3.5 border-t border-violet-500/20 bg-slate-950 text-xs text-slate-300 font-mono space-y-2 max-h-96 overflow-y-auto leading-relaxed">
               <div className="flex items-center gap-2 pb-1 text-[11px] text-violet-400 border-b border-violet-900/40 font-sans">
                 <Cpu className="w-3.5 h-3.5" />
-                <span>Autonomous Chain-of-Thought & Constraint Verification</span>
+                <span>Catatan proses agent — bukan bukti hasil sudah terverifikasi</span>
               </div>
               <div className="whitespace-pre-wrap text-slate-300 text-[12px] leading-relaxed">
                 {thought}
@@ -521,9 +524,9 @@ export const AgentReasoningCard: React.FC<AgentReasoningCardProps> = ({
                         {act.durationMs}ms
                       </span>
                     )}
-                    <span className="flex items-center gap-1 text-[10px] text-emerald-400 bg-emerald-950 px-2 py-0.5 rounded border border-emerald-800/40 shrink-0">
+                    <span className={`flex items-center gap-1 text-[10px] px-2 py-0.5 rounded border shrink-0 ${act.success === false ? 'text-rose-300 bg-rose-950 border-rose-800' : act.success === true ? 'text-emerald-400 bg-emerald-950 border-emerald-800/40' : 'text-slate-400 bg-slate-900 border-slate-700'}`}>
                       <CheckCircle2 className="w-3 h-3" />
-                      <span>{act.output ? 'Executed' : 'Active'}</span>
+                      <span>{act.success === false ? 'Failed' : act.success === true ? 'Executed' : 'Requested'}</span>
                     </span>
                   </div>
                 </div>
@@ -563,7 +566,7 @@ export const AgentReasoningCard: React.FC<AgentReasoningCardProps> = ({
           <Sparkles className="w-4 h-4 text-violet-400" />
           <span>Agent formulating solution deliverable...</span>
         </div>
-      ) : null}
+      ) : <p role="status" className="text-xs text-amber-300">Agent belum memberikan jawaban akhir. Catatan proses dan hasil tool di atas bukan hasil tugas yang selesai.</p>}
     </div>
   );
 };

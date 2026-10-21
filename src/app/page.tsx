@@ -125,6 +125,7 @@ export default function ChatPage() {
       publishedDate?: string;
     }>
   >([]);
+  const [diagnosticMessageId, setDiagnosticMessageId] = useState<string | null>(null);
   const [liveToolOutputs, setLiveToolOutputs] = useState<Array<{ tool: string; target?: string; success: boolean; output: string; durationMs?: number }>>([]);
 
   // Agent Skills & Personas
@@ -1051,6 +1052,9 @@ export default function ChatPage() {
         createdAt: new Date().toISOString(),
       };
 
+      setDiagnosticMessageId(assistantMsgId);
+      setWebSearchSources([]);
+      setLiveToolOutputs([]);
       setMessages([...newMessages, assistantPlaceholder]);
       setIsStreaming(true);
       setAgentSteps([]);
@@ -1156,6 +1160,12 @@ export default function ChatPage() {
             try {
               const parsed = JSON.parse(dataStr);
 
+              if (currentEvent === 'agent_final' && typeof parsed.content === 'string') {
+                accumulatedContent = parsed.content;
+                setMessages((prev) => prev.map((message) => message.id === assistantMsgId ? { ...message, content: parsed.content } : message));
+                currentEvent = '';
+                continue;
+              }
               if (currentEvent === 'artifact') {
                 if (parsed.type === 'document' && typeof parsed.url === 'string' &&
                     /^data:(application\/pdf|text\/plain;charset=utf-8);base64,/.test(parsed.url)) {
@@ -2155,8 +2165,8 @@ export default function ChatPage() {
                             <AgentReasoningCard
                               content={msg.content}
                               isStreaming={isStreaming && idx === messages.length - 1}
-                              webSearchSources={webSearchSources}
-                              liveToolOutputs={liveToolOutputs}
+                              webSearchSources={msg.id === diagnosticMessageId ? webSearchSources : []}
+                              liveToolOutputs={msg.id === diagnosticMessageId ? liveToolOutputs : []}
                               agentSteps={
                                 isStreaming && idx === messages.length - 1 ? agentSteps : []
                               }
