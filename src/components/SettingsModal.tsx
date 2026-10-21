@@ -15,6 +15,8 @@ import {
   CheckCircle2,
   Clock,
 } from 'lucide-react';
+import { useAuth } from '@/lib/AuthContext';
+import { EndpointManager } from './EndpointManager';
 import { ProviderId } from '@/lib/ai/types';
 
 interface KeyItem {
@@ -45,6 +47,8 @@ interface SettingsModalProps {
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onSaved }) => {
+  const { user } = useAuth();
+  const [section, setSection] = useState<'endpoints' | 'keys'>('endpoints');
   const [settings, setSettings] = useState<Record<string, ProviderSettings>>({});
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<ProviderId>('radox');
@@ -69,12 +73,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
   };
 
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && user?.role === 'admin') {
       fetchSettings();
       setInputKey('');
       setStatusMsg(null);
     }
-  }, [isOpen]);
+  }, [isOpen, user?.role]);
 
   const handleAddKey = async (provider: ProviderId) => {
     if (!inputKey.trim()) return;
@@ -146,6 +150,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
   };
 
   if (!isOpen) return null;
+  if (user?.role !== 'admin') return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/90 p-4">
+      <div role="alert" className="rounded-xl border border-slate-700 bg-slate-900 p-6 text-slate-100">
+        <p>Hanya Administrator yang dapat mengelola endpoint dan API key.</p>
+        <button onClick={onClose} className="mt-4 text-cyan-300">Tutup</button>
+      </div>
+    </div>
+  );
 
   const currentProviderData = settings[activeTab] || {
     isConfigured: false,
@@ -166,9 +178,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
             </div>
             <div className="min-w-0">
               <h2 className="text-sm sm:text-base font-bold text-slate-100 flex items-center gap-1.5 sm:gap-2 flex-wrap">
-                <span>Multi-Account API Key Pool</span>
+                <span>Endpoint & API Key — Admin</span>
                 <span className="text-[9px] sm:text-[10px] px-1.5 sm:px-2 py-0.5 rounded-full bg-cyan-950 text-cyan-300 border border-cyan-800/50 font-normal">
-                  Auto-Rotation
+                  {section === 'keys' ? 'Auto-Rotation' : 'Admin Only'}
                 </span>
               </h2>
               <p className="text-[11px] sm:text-xs text-slate-400 truncate">
@@ -186,6 +198,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
 
         {/* Content */}
         <div className="p-3.5 sm:p-6 space-y-4 sm:space-y-5 overflow-y-auto flex-1">
+          <div className="flex gap-2 text-sm">
+            <button className={`rounded-lg px-3 py-2 ${section === 'endpoints' ? 'bg-cyan-700' : 'bg-slate-800'}`} onClick={() => setSection('endpoints')}>Endpoint baru</button>
+            <button className={`rounded-lg px-3 py-2 ${section === 'keys' ? 'bg-cyan-700' : 'bg-slate-800'}`} onClick={() => setSection('keys')}>Key Radox / InkStone</button>
+          </div>
+          {section === 'endpoints' ? <EndpointManager onSaved={onSaved} /> : <>
           {/* Provider Tabs */}
           <div className="flex border-b border-slate-800 pb-2 gap-2 text-xs">
             {(['radox', 'inkstone'] as ProviderId[]).map((p) => {
@@ -373,6 +390,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, o
               <span>{statusMsg.text}</span>
             </div>
           )}
+          </>}
         </div>
 
         {/* Footer */}

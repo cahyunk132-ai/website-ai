@@ -146,3 +146,14 @@ export function setProviderConfigured(provider: ProviderId, configured: boolean)
 export function getAllProviderStats(): Record<ProviderId, ProviderHealth> {
   return JSON.parse(JSON.stringify(providerStats));
 }
+
+/** Register custom endpoints without exposing their private URL on public status. */
+export function registerCustomProvider(provider: `custom:${string}`, name: string): void {
+  const old = providerStats[provider];
+  if (old) { old.name = name; old.isConfigured = true; return; }
+  providerStats[provider] = {
+    provider, name, baseUrl: '', isConfigured: true, isHealthy: true,
+    totalRequests: 0, failedRequests: 0, tokens: { prompt: 0, completion: 0, total: 0 },
+    estimatedCostUsd: 0, quotaStatus: 'unknown', quotaSource: 'unavailable',
+  };
+}

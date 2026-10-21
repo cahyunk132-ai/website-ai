@@ -32,7 +32,7 @@ export class RadoxAdapter implements ProviderAdapter {
   }
 
   isConfigured(): boolean {
-    return Boolean(this.getApiKey() || process.env.RADOX_API_KEYS);
+    return Boolean(this.getApiKey() || process.env.RADOX_API_KEYS || keyPoolManager.hasConfiguredKeys(this.id));
   }
 
   getApiKey(): string | null {

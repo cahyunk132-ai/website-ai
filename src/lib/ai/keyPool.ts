@@ -40,12 +40,17 @@ class KeyPoolManager {
   private inMemoryKeys: Map<ProviderId, KeyPoolItem[]> = new Map();
   private rotationPointers: Map<ProviderId, number> = new Map();
   private initialized: boolean = false;
+  private refreshedAt = 0;
 
   constructor() {
     this.inMemoryKeys.set('radox', []);
     this.inMemoryKeys.set('inkstone', []);
     this.rotationPointers.set('radox', 0);
     this.rotationPointers.set('inkstone', 0);
+  }
+
+  hasConfiguredKeys(provider: ProviderId): boolean {
+    return (this.inMemoryKeys.get(provider)?.length || 0) > 0;
   }
 
   private generateKeyId(rawKey: string): string {
@@ -145,13 +150,14 @@ class KeyPoolManager {
     }
 
     this.initialized = true;
+    this.refreshedAt = Date.now();
   }
 
   /**
    * Ensures the pool is loaded at least once.
    */
   async ensureInitialized(): Promise<void> {
-    if (!this.initialized) {
+    if (!this.initialized || Date.now() - this.refreshedAt > 30_000) {
       await this.refreshPool();
     }
   }

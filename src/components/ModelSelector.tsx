@@ -127,7 +127,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
               </div>
 
               {/* Provider Filter Tabs (Segmented Control) */}
-              <div className="flex items-center gap-1 text-xs bg-slate-950 p-1 rounded-xl border border-slate-800">
+              <div className="flex items-center gap-1 overflow-x-auto text-xs bg-slate-950 p-1 rounded-xl border border-slate-800">
                 <button
                   type="button"
                   onClick={() => onSelectProvider('auto')}
@@ -161,6 +161,11 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
                 >
                   Intern InkStone
                 </button>
+                {Array.from(new Set(models.filter((model) => model.provider.startsWith('custom:')).map((model) => model.provider))).map((provider) => (
+                  <button key={provider} type="button" onClick={() => onSelectProvider(provider)} className={`shrink-0 py-1.5 px-2 rounded-lg text-xs ${selectedProvider === provider ? 'bg-cyan-600 text-white' : 'text-slate-400 hover:bg-slate-800'}`}>
+                    {models.find((model) => model.provider === provider)?.name.split(' · ').slice(1).join(' · ') || 'Custom'}
+                  </button>
+                ))}
               </div>
  
               {/* Radox Daytime Notice */}
@@ -248,7 +253,7 @@ export const ModelSelector: React.FC<ModelSelectorProps> = ({
                             </span>
                           )}
                           <span className="text-[9px] font-mono px-1 py-0.5 rounded bg-slate-800 text-slate-400 shrink-0">
-                            {model.provider === 'inkstone' ? 'InkStone' : 'Radox'}
+                            {model.provider.startsWith('custom:') ? 'Custom' : model.provider === 'inkstone' ? 'InkStone' : 'Radox'}
                           </span>
                         </div>
                         <span className="text-[10px] text-cyan-400 uppercase tracking-wider font-mono font-medium shrink-0 ml-2">

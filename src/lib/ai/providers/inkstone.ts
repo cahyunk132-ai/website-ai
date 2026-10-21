@@ -32,7 +32,7 @@ export class InkstoneAdapter implements ProviderAdapter {
   }
 
   isConfigured(): boolean {
-    return Boolean(this.getApiKey() || process.env.INKSTONE_API_KEYS);
+    return Boolean(this.getApiKey() || process.env.INKSTONE_API_KEYS || keyPoolManager.hasConfiguredKeys(this.id));
   }
 
   getApiKey(): string | null {

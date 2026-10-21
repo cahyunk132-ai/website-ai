@@ -5,6 +5,9 @@
  * multi-step Autonomous Agent Mode with live tool execution.
  */
 
+import { providerSelectionSchema } from '@/lib/ai/endpointSchema';
+import { customModelCatalog } from '@/lib/ai/endpointStore';
+
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { defaultRouter } from '@/lib/ai/router';
@@ -49,7 +52,7 @@ const chatRequestSchema = z.object({
     })
   ).min(1),
   model: z.string().min(1),
-  provider: z.enum(['radox', 'inkstone', 'auto']).optional(),
+  provider: providerSelectionSchema.optional(),
   temperature: z.number().min(0).max(2).optional(),
   topP: z.number().min(0).max(1).optional(),
   maxTokens: z.number().min(1).max(32768).optional(),
@@ -117,7 +120,13 @@ export async function POST(req: NextRequest) {
 
     // 1. Model access: a model of a higher tier may not be used. The check
     //    runs before the quota is counted, a rejected request is free.
-    const selectedModel = getModelById(model, providerParam);
+    const customModels = model.startsWith('custom:') || providerParam?.startsWith('custom:') ? await customModelCatalog() : [];
+    const selectedModel = model.startsWith('custom:') || providerParam?.startsWith('custom:')
+      ? customModels.find((entry) => entry.id === model && (!providerParam || entry.provider === providerParam))
+      : getModelById(model, providerParam);
+    if ((model.startsWith('custom:') || providerParam?.startsWith('custom:')) && !selectedModel) {
+      return NextResponse.json({ error: 'Endpoint atau model tidak ditemukan, tidak cocok, atau dinonaktifkan.' }, { status: 400 });
+    }
     if (selectedModel && !canAccessTier(role, selectedModel.minTier)) {
       const required = tierLabel(selectedModel.minTier);
 
@@ -146,6 +155,9 @@ export async function POST(req: NextRequest) {
     let effectiveProvider = providerParam;
     let visionSwitchNotice: string | undefined;
 
+    if (hasImageAttachments && selectedModel?.provider.startsWith('custom:') && !selectedModel.supportsVision) {
+      return NextResponse.json({ error: 'Model endpoint ini tidak mendukung gambar. Pilih model Vision.' }, { status: 400 });
+    }
     if (hasImageAttachments && selectedModel && !selectedModel.supportsVision) {
       // Find a vision-capable model in the same provider, or fallback to any vision model
       const { getModelsByProvider } = await import('@/lib/ai/models');
