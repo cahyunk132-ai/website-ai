@@ -3,6 +3,10 @@ import { isIP } from 'node:net';
 import ipaddr from 'ipaddr.js';
 import { Agent, fetch as httpFetch } from 'undici';
 
+export class EndpointHttpError extends Error {
+  constructor(readonly status: number) { super(`Endpoint mengembalikan HTTP ${status}.`); }
+}
+
 export function validateEndpointUrl(value: string): URL {
   const url = new URL(value);
   if (url.protocol !== 'https:' || url.username || url.password || url.search || url.hash || (url.port && url.port !== '443')) {
@@ -46,7 +50,7 @@ export async function endpointJson(baseUrl: string, path: '/models' | '/chat/com
     if (!response.ok) {
       await response.body?.cancel();
       // Do not relay an upstream response body: it may echo credentials.
-      throw new Error(`Endpoint mengembalikan HTTP ${response.status}.`);
+      throw new EndpointHttpError(response.status);
     }
     if (!response.body) throw new Error('Endpoint tidak mengembalikan data.');
     const reader = response.body.getReader();

@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+import { submittedKeys } from './endpointSchema';
 import { createClient } from '@supabase/supabase-js';
 import { decryptSecret, encryptSecret, maskApiKey } from '../crypto';
 import type { EndpointInput, EndpointRecord, SafeEndpoint } from './endpointSchema';
@@ -12,10 +14,19 @@ function database() {
 function requireEncryption() {
   if (!process.env.APP_ENCRYPTION_KEY) throw new Error('APP_ENCRYPTION_KEY harus dikonfigurasi untuk menyimpan API key dengan aman.');
 }
-export function publicEndpoint(row: EndpointRecord): SafeEndpoint {
-  const { encrypted_key, ...safe } = row;
+export function endpointKeyId(key: string): string {
+  return createHash('sha256').update(key).digest('hex');
+}
+export function endpointKeys(row: EndpointRecord): string[] {
   requireEncryption();
-  return { ...safe, maskedKey: maskApiKey(decryptSecret(encrypted_key)) };
+  const encrypted = row.encrypted_keys?.length ? row.encrypted_keys : [row.encrypted_key];
+  return [...new Set(encrypted.filter(Boolean).map(decryptSecret))];
+}
+export function publicEndpoint(row: EndpointRecord): SafeEndpoint {
+  const keys = endpointKeys(row).map((key) => ({ id: endpointKeyId(key), maskedKey: maskApiKey(key) }));
+  // Whitelist fields so neither legacy nor pooled ciphertext/raw inputs escape.
+  return { id: row.id, name: row.name, baseUrl: row.baseUrl, models: row.models, enabled: row.enabled,
+    updated_at: row.updated_at, maskedKey: keys[0]?.maskedKey || 'Not Configured', keyCount: keys.length, keys };
 }
 export async function listEndpoints(): Promise<EndpointRecord[]> {
   const { data, error } = await database().from('ai_endpoints').select('*').order('created_at', { ascending: true });
@@ -32,16 +43,28 @@ export async function saveEndpoint(input: EndpointInput, id?: string): Promise<S
   const db = database();
   const old = id ? await getEndpoint(id) : null;
   if (id && !old) throw new Error('Endpoint tidak ditemukan.');
-  if (!input.apiKey && !old) throw new Error('API key wajib diisi untuk endpoint baru.');
-  // Never send the old key to a new destination without explicit replacement.
-  if (old && old.baseUrl !== input.baseUrl && !input.apiKey) throw new Error('Perubahan URL endpoint membutuhkan API key baru.');
+  const supplied = submittedKeys(input);
+  if (!supplied.length && !old) throw new Error('API key wajib diisi untuk endpoint baru.');
+  const changedUrl = old && old.baseUrl !== input.baseUrl;
+  if (changedUrl && !supplied.length) throw new Error('Perubahan URL endpoint membutuhkan API key baru.');
+  const replace = changedUrl || input.keyMode === 'replace' || Boolean(input.apiKey);
+  const previous = old && !replace ? endpointKeys(old) : [];
+  const removed = new Set(input.removeKeyIds || []);
+  const keys = [...new Set([...previous.filter((key) => !removed.has(endpointKeyId(key))), ...supplied])];
+  if (!keys.length) throw new Error('Endpoint harus memiliki minimal satu API key.');
+  if (keys.length > 50) throw new Error('Maksimal 50 API key per endpoint.');
+  const oldCiphertexts = new Map(old ? (old.encrypted_keys?.length ? old.encrypted_keys : [old.encrypted_key]).map((ciphertext) => [decryptSecret(ciphertext), ciphertext]) : []);
+  const encryptedKeys = keys.map((key) => oldCiphertexts.get(key) || encryptSecret(key));
   const row = {
     name: input.name, baseUrl: input.baseUrl, enabled: input.enabled, models: input.models,
-    encrypted_key: input.apiKey ? encryptSecret(input.apiKey) : old!.encrypted_key,
+    encrypted_key: encryptedKeys[0],
+    encrypted_keys: encryptedKeys,
     updated_at: new Date().toISOString(),
   };
-  const query = id ? db.from('ai_endpoints').update(row).eq('id', id) : db.from('ai_endpoints').insert(row);
+  let query = id ? db.from('ai_endpoints').update(row).eq('id', id) : db.from('ai_endpoints').insert(row);
+  if (id && old?.updated_at) query = query.eq('updated_at', old.updated_at);
   const { data, error } = await query.select('*').single();
+  if (error?.code === 'PGRST116') throw new Error('Endpoint berubah selama penyimpanan. Muat ulang lalu coba lagi.');
   if (error) throw new Error('Gagal menyimpan endpoint ke database.');
   return publicEndpoint(data as EndpointRecord);
 }
@@ -50,8 +73,9 @@ export async function deleteEndpoint(id: string): Promise<void> {
   if (error) throw new Error('Gagal menghapus endpoint.');
 }
 export function endpointKey(row: EndpointRecord): string {
-  requireEncryption();
-  return decryptSecret(row.encrypted_key);
+  const key = endpointKeys(row)[0];
+  if (!key) throw new Error('Endpoint tidak memiliki API key.');
+  return key;
 }
 export function endpointModels(rows: EndpointRecord[]): ModelCapability[] {
   return rows.filter((row) => row.enabled).flatMap((row) => row.models.map((model) => ({
