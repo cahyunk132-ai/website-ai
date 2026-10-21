@@ -3,6 +3,8 @@
  * Lists, creates, updates and deletes the cron driven background prompts.
  */
 
+import { providerSelectionSchema } from '@/lib/ai/endpointSchema';
+
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { getSessionFromRequest } from '@/lib/auth';
@@ -14,8 +16,8 @@ export const dynamic = 'force-dynamic';
 const createSchema = z.object({
   name: z.string().min(1).max(120),
   prompt: z.string().min(1).max(20000),
-  model: z.string().min(1).max(80),
-  provider: z.string().max(40).optional(),
+  model: z.string().min(1).max(240),
+  provider: providerSelectionSchema.optional(),
   cron: z.string().min(5).max(80),
 });
 
@@ -23,8 +25,8 @@ const updateSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1).max(120).optional(),
   prompt: z.string().min(1).max(20000).optional(),
-  model: z.string().min(1).max(80).optional(),
-  provider: z.string().max(40).optional(),
+  model: z.string().min(1).max(240).optional(),
+  provider: providerSelectionSchema.optional(),
   cron: z.string().min(5).max(80).optional(),
   enabled: z.boolean().optional(),
 });

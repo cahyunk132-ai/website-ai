@@ -10,7 +10,7 @@ import { ProviderId } from '@/lib/ai/types';
 import { keyPoolManager } from '@/lib/ai/keyPool';
 import { RadoxAdapter } from '@/lib/ai/providers/radox';
 import { InkstoneAdapter } from '@/lib/ai/providers/inkstone';
-import { getSessionFromRequest } from '@/lib/auth';
+import { requireAdmin } from '@/lib/adminAccess';
 
 const addKeySchema = z.object({
   provider: z.enum(['radox', 'inkstone']),
@@ -24,7 +24,8 @@ const deleteKeySchema = z.object({
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  const denied = await requireAdmin(req); if (denied) return denied;
   await keyPoolManager.refreshPool();
 
   const providers: ProviderId[] = ['radox', 'inkstone'];
@@ -43,18 +44,12 @@ export async function GET() {
     };
   }
 
-  return NextResponse.json({ settings: result });
+  return NextResponse.json({ settings: result }, { headers: { 'Cache-Control': 'no-store' } });
 }
 
 export async function POST(req: NextRequest) {
   try {
-    const user = await getSessionFromRequest(req);
-    if (!user || user.role !== 'admin') {
-      return NextResponse.json(
-        { error: 'Akses ditolak: Hanya akun Administrator yang dapat mengubah atau menambah API Key sistem.' },
-        { status: 403 }
-      );
-    }
+    const denied = await requireAdmin(req); if (denied) return denied;
 
     const json = await req.json();
 
@@ -110,13 +105,7 @@ export async function POST(req: NextRequest) {
 
 export async function DELETE(req: NextRequest) {
   try {
-    const user = await getSessionFromRequest(req);
-    if (!user || user.role !== 'admin') {
-      return NextResponse.json(
-        { error: 'Akses ditolak: Hanya akun Administrator yang dapat menghapus API Key sistem.' },
-        { status: 403 }
-      );
-    }
+    const denied = await requireAdmin(req); if (denied) return denied;
 
     const json = await req.json();
     const parsed = deleteKeySchema.safeParse(json);

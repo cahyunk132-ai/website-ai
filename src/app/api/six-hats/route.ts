@@ -10,6 +10,9 @@
  * analysis therefore costs six requests.
  */
 
+import { providerSelectionSchema } from '@/lib/ai/endpointSchema';
+import { customModelCatalog } from '@/lib/ai/endpointStore';
+
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { defaultRouter } from '@/lib/ai/router';
@@ -44,7 +47,7 @@ const sixHatsRequestSchema = z.object({
   /** The topic that is analysed by the six hats. */
   topic: z.string().min(3).max(4000),
   model: z.string().min(1),
-  provider: z.enum(['radox', 'inkstone', 'auto']).optional(),
+  provider: providerSelectionSchema.optional(),
   temperature: z.number().min(0).max(2).optional(),
   /** The conversation the analysis is stored in. */
   conversationId: z.string().optional(),
@@ -103,7 +106,13 @@ export async function POST(req: NextRequest) {
 
     // The model of the account must be usable, the rule is the same as in the
     // chat endpoint.
-    const selectedModel = getModelById(model, providerParam);
+    const customModels = model.startsWith('custom:') || providerParam?.startsWith('custom:') ? await customModelCatalog() : [];
+    const selectedModel = model.startsWith('custom:') || providerParam?.startsWith('custom:')
+      ? customModels.find((entry) => entry.id === model && (!providerParam || entry.provider === providerParam))
+      : getModelById(model, providerParam);
+    if ((model.startsWith('custom:') || providerParam?.startsWith('custom:')) && !selectedModel) {
+      return NextResponse.json({ error: 'Endpoint atau model tidak ditemukan, tidak cocok, atau dinonaktifkan.' }, { status: 400 });
+    }
     if (selectedModel && !canAccessTier(role, selectedModel.minTier)) {
       const required = tierLabel(selectedModel.minTier);
 

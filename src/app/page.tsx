@@ -624,6 +624,7 @@ export default function ChatPage() {
       if (res.ok) {
         const data = await res.json();
         setModels(data.models || []);
+        setSelectedProvider((previous) => previous === 'auto' || data.models?.some((model: ModelCapability) => model.provider === previous) ? previous : 'auto');
         if (data.models && data.models.length > 0) {
           setSelectedModelId((prev) => {
             const exists = data.models.some((m: any) => m.id === prev);
@@ -1968,7 +1969,7 @@ export default function ChatPage() {
                       className="text-[9px] px-1 py-0.2 rounded bg-slate-800 text-slate-400 font-mono"
                       title={m.provider === 'radox' ? 'Radox AI: Beroperasi siang hari' : 'Intern InkStone: 24 Jam'}
                     >
-                      {m.provider === 'inkstone' ? 'Ink' : 'Radox ☀️'}
+                      {m.provider.startsWith('custom:') ? 'Custom' : m.provider === 'inkstone' ? 'Ink' : 'Radox ☀️'}
                     </span>
                   </button>
                 );
@@ -2508,6 +2509,7 @@ export default function ChatPage() {
       <SettingsModal
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
+        onSaved={fetchModels}
       />
       <SkillsModal
         isOpen={isSkillsOpen}

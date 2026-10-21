@@ -9,6 +9,8 @@ import {
   ProviderId,
   ProviderAdapter,
 } from './types';
+import { keyPoolManager } from './keyPool';
+import { completeCustomChat } from './providers/custom';
 import { Tier } from './tiers';
 import { getModelById, getFallbackForModel, VERIFIED_MODELS } from './models';
 import { radoxAdapter, RadoxAdapter } from './providers/radox';
@@ -130,6 +132,12 @@ export class ProviderRouter {
     options: ChatOptions,
     onChunk: (chunk: ChatStreamChunk) => void
   ): Promise<ChatCompletionResult> {
+    const customResult = await completeCustomChat(options);
+    if (customResult) {
+      onChunk({ text: customResult.text, done: true, model: customResult.model, provider: customResult.provider, usage: customResult.usage });
+      return customResult;
+    }
+    await keyPoolManager.ensureInitialized();
     const plan = this.buildRoutePlan(options.model, options.provider, options.maxTier);
     const executionAttempts: Array<{ provider: ProviderId; model: string; isFallback: boolean; fallbackReason?: string }> = [
       { provider: plan.primaryProvider, model: plan.primaryModel, isFallback: false },
@@ -261,6 +269,9 @@ export class ProviderRouter {
    * Non-streaming completion with automatic fallback
    */
   async completeChat(options: ChatOptions): Promise<ChatCompletionResult> {
+    const customResult = await completeCustomChat(options);
+    if (customResult) return customResult;
+    await keyPoolManager.ensureInitialized();
     const plan = this.buildRoutePlan(options.model, options.provider, options.maxTier);
     const executionAttempts = [
       { provider: plan.primaryProvider, model: plan.primaryModel, isFallback: false },

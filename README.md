@@ -452,3 +452,56 @@ under the existing message access rules so downloads survive conversation reload
 Without this migration, persistence of messages with attachments is not reliable.
 Files are streamed inline and stored in message JSON, so monitor database and
 network growth; use private object storage for larger production file workloads.
+
+### Admin-managed endpoints and API keys (no redeploy per endpoint)
+
+Admins can open **API settings → Endpoint baru** to add independent
+**OpenAI-compatible** connections alongside Radox and InkStone. Enter:
+
+1. A display name and public HTTPS base URL, e.g. `https://api.example.com/v1`
+   (not the full `/chat/completions` URL).
+2. The API key in the password field. Never paste secrets into issues or chat.
+3. At least one upstream model ID, its minimum account tier, and whether the
+   provider actually supports Vision for that model.
+4. Optionally run **Tes koneksi /models**, then **Simpan endpoint**.
+
+The connection test verifies `GET /models` only, not a chat completion. Some
+providers do not implement `/models`; their connections can still be saved with
+manual model IDs and verified through chat. Enabled models appear in the selector
+immediately after saving. The public catalog contains names/capabilities only,
+not endpoint URLs or keys. Model IDs are namespaced per endpoint, so different
+vendors can use the same upstream model name without collisions.
+
+Admins can edit URLs, rotate keys, enable/disable connections, or delete them.
+An empty key when editing preserves the stored key **only if the URL is
+unchanged**. A changed destination requires an explicit replacement key. Existing
+conversations cannot continue using a disabled/deleted endpoint; select another
+model. Custom providers do not silently fall back to another vendor.
+
+**One-time deployment setup:**
+
+- Apply `supabase/migrations/20261027000000_admin_ai_endpoints.sql`.
+- Ensure the server already has `SUPABASE_URL` (or its public equivalent),
+  `SUPABASE_SERVICE_ROLE_KEY`, and a strong `APP_ENCRYPTION_KEY` configured.
+  Endpoint writes fail rather than pretending to persist in memory when this
+  setup is missing. Keep the encryption key stable or re-enter stored API keys.
+- After that, endpoint/key changes use the admin UI, with no `.env` edit or
+  redeploy required. Built-in Radox/InkStone key pools remain available in the
+  separate key tab; their warm-instance pools refresh within 30 seconds.
+
+**Security and compatibility:**
+
+- API configuration reads/writes require the current server-resolved admin role;
+  neither premium users nor an old admin claim in a session grants permission.
+- Endpoint credentials use AES-256-GCM encryption and a service-role-only table.
+  API responses expose masked keys only, and configuration responses are no-store.
+- Custom endpoints must use public DNS and HTTPS port 443. Private/reserved IPs,
+  embedded URL credentials, query secrets, and redirects are blocked. Validated
+  DNS addresses are pinned to the socket to prevent DNS-rebinding requests.
+- Custom chat currently uses non-streaming OpenAI-compatible JSON completions;
+  the chat UI receives the result once complete. Native tool-call APIs, Anthropic
+  Messages, and Gemini-specific protocols are not supported directly. The text
+  agent protocol still enables the platform's agent tools.
+- Upstream requests have a 60-second timeout and 4-MiB response cap. Custom model
+  pricing/context are not discovered automatically; tier 0 means access for free
+  accounts, **not** that the vendor API is free.

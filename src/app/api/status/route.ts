@@ -2,7 +2,11 @@
  * Hyunk AI Hub - Provider Status & Usage Metrics API
  */
 
+import { keyPoolManager } from '@/lib/ai/keyPool';
+
 import { NextResponse } from 'next/server';
+import { customModelCatalog } from '@/lib/ai/endpointStore';
+import { registerCustomProvider } from '@/lib/ai/usage';
 import { getAllProviderStats } from '@/lib/ai/usage';
 import { readPersistedProviderStats } from '@/lib/ai/usageTelemetry';
 import { createServerSupabaseAdminClient } from '@/lib/supabase/server';
@@ -12,7 +16,15 @@ import { inkstoneAdapter } from '@/lib/ai/providers/inkstone';
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
+  await keyPoolManager.refreshPool();
+  const customModels = await customModelCatalog();
+  for (const model of customModels) {
+    if (model.provider.startsWith('custom:')) registerCustomProvider(model.provider as `custom:${string}`, model.name.split(' · ').slice(1).join(' · '));
+  }
   const stats = getAllProviderStats();
+  for (const key of Object.keys(stats)) {
+    if (key.startsWith('custom:') && !customModels.some((model) => model.provider === key)) delete stats[key as `custom:${string}`];
+  }
 
   // Refresh configured state
   stats.radox.isConfigured = radoxAdapter.isConfigured();

@@ -1,5 +1,7 @@
 'use client';
 
+import type { ProviderId } from '@/lib/ai/types';
+
 import React, { useEffect, useRef, useState } from 'react';
 import {
   X,
@@ -28,7 +30,7 @@ interface SixHatsPanelProps {
   onClose: () => void;
   /** The model that generates the six perspectives. */
   model: string;
-  provider?: 'auto' | 'radox' | 'inkstone';
+  provider?: 'auto' | ProviderId;
   /** The tier of the account, the feature needs Premium 3. */
   tier: Tier;
   role: UserRole;

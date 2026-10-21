@@ -4,7 +4,7 @@
 
 import type { Tier } from './tiers';
 
-export type ProviderId = 'radox' | 'inkstone';
+export type ProviderId = 'radox' | 'inkstone' | `custom:${string}`;
 
 export interface FileAttachment {
   id: string;
