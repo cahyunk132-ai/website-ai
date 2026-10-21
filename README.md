@@ -505,3 +505,29 @@ model. Custom providers do not silently fall back to another vendor.
 - Upstream requests have a 60-second timeout and 4-MiB response cap. Custom model
   pricing/context are not discovered automatically; tier 0 means access for free
   accounts, **not** that the vendor API is free.
+
+#### Multiple API keys per custom endpoint
+
+An endpoint now holds up to **50 unique API keys**. In its admin form, use
+**+ Tambah API key** for more password fields. When editing, new keys are appended
+by default; stored keys are shown masked with their count. Select individual
+stored keys to remove on save, or choose **Ganti seluruh pool** to replace all
+keys. The last key cannot be removed without adding a replacement. Changing the
+URL always drops the old pool and requires explicit new credentials.
+
+The chat router randomizes the starting key for each request (works across
+serverless instances). It tries another key on explicit HTTP 401/402/403/429,
+at most once per unique key within a shared 60-second deadline. It does not
+replay ambiguous network or 5xx failures, and never sends the keys to another
+endpoint. This is randomized selection, not a globally synchronized round-robin
+or persistent cooldown system. The `/models` test succeeds on one usable newly
+entered key; it is not verification that every key in the pool is healthy.
+
+**Migration before deployment:** apply
+`supabase/migrations/20261028000000_endpoint_key_pools.sql`. This adds the encrypted
+key array and backfills each existing single key without replacing or exposing
+it. The first-key legacy field remains mirrored for compatibility. The legacy
+single `apiKey` API input remains a replacement operation; new clients should
+submit `apiKeys` arrays (append by default), optional `keyMode`, and optional
+`removeKeyIds` obtained from masked admin metadata. Admin authorization and the
+service-role-only database access rules are unchanged.

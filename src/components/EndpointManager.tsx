@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import type { EndpointInput, SafeEndpoint } from '@/lib/ai/endpointSchema';
 
-const emptyForm = (): EndpointInput => ({ name: '', baseUrl: '', apiKey: undefined, enabled: true, models: [{ id: '', minTier: 0, supportsVision: false }] });
+const emptyForm = (): EndpointInput => ({ name: '', baseUrl: '', apiKeys: [''], enabled: true, models: [{ id: '', minTier: 0, supportsVision: false }] });
 const fieldClass = 'w-full rounded-lg bg-slate-950 border border-slate-700 px-3 py-2 text-sm text-slate-100';
 
 export function EndpointManager({ onSaved }: { onSaved?: () => void }) {
@@ -37,7 +37,7 @@ export function EndpointManager({ onSaved }: { onSaved?: () => void }) {
   function reset() { setForm(emptyForm()); setEditingId(undefined); }
   function edit(endpoint: SafeEndpoint) {
     setEditingId(endpoint.id);
-    setForm({ name: endpoint.name, baseUrl: endpoint.baseUrl, enabled: endpoint.enabled, apiKey: undefined, models: endpoint.models.map((model) => ({ ...model })) });
+    setForm({ name: endpoint.name, baseUrl: endpoint.baseUrl, enabled: endpoint.enabled, apiKeys: [''], keyMode: 'append', removeKeyIds: [], models: endpoint.models.map((model) => ({ ...model })) });
     setMessage(''); setError('');
   }
   return (
@@ -52,7 +52,8 @@ export function EndpointManager({ onSaved }: { onSaved?: () => void }) {
           <div key={endpoint.id} className="rounded-xl border border-slate-700 p-3 text-xs space-y-2">
             <div className="flex justify-between gap-2"><strong>{endpoint.name}</strong><span>{endpoint.enabled ? 'Aktif' : 'Nonaktif'}</span></div>
             <p className="break-all text-slate-400">{endpoint.baseUrl}</p>
-            <p>{endpoint.maskedKey} · {endpoint.models.length} model</p>
+            <p>{endpoint.keyCount} API key · {endpoint.models.length} model</p>
+            <p className="text-slate-400 break-all">{endpoint.keys.map((key) => key.maskedKey).join(' · ')}</p>
             <div className="flex gap-3">
               <button type="button" disabled={busy} onClick={() => edit(endpoint)} className="text-cyan-300 underline">Edit / ganti API key</button>
               <button type="button" disabled={busy} onClick={async () => {
@@ -69,7 +70,8 @@ export function EndpointManager({ onSaved }: { onSaved?: () => void }) {
       </div>
       <form className="space-y-3 border-t border-slate-700 pt-4" onSubmit={async (event) => {
         event.preventDefault();
-        if (await request(editingId ? 'PATCH' : 'POST', editingId ? { id: editingId, ...form } : form)) {
+        const input = { ...form, apiKeys: form.apiKeys?.map((key) => key.trim()).filter(Boolean) };
+        if (await request(editingId ? 'PATCH' : 'POST', editingId ? { id: editingId, ...input } : input)) {
           reset(); setMessage('Endpoint tersimpan. Model aktif tersedia di pemilih model. Penyimpanan bukan jaminan koneksi berhasil; gunakan Tes koneksi.'); await load(); onSaved?.();
         }
       }}>
@@ -80,9 +82,34 @@ export function EndpointManager({ onSaved }: { onSaved?: () => void }) {
         <label className="block text-xs">Base URL HTTPS
           <input required type="url" className={fieldClass} value={form.baseUrl} onChange={(event) => setForm({ ...form, baseUrl: event.target.value })} placeholder="https://api.provider.com/v1" />
         </label>
-        <label className="block text-xs">API key {editingId ? '(kosongkan untuk mempertahankan; wajib diganti jika URL berubah)' : ''}
-          <input type="password" autoComplete="new-password" required={!editingId} maxLength={4096} className={fieldClass} value={form.apiKey || ''} onChange={(event) => setForm({ ...form, apiKey: event.target.value || undefined })} placeholder="sk-…" />
-        </label>
+        <fieldset className="space-y-2">
+          <legend className="text-xs font-semibold">API keys — beberapa key untuk satu endpoint (maksimal 50)</legend>
+          {editingId && <>
+            <p className="text-xs text-slate-400">Key baru ditambahkan ke pool. Kosongkan untuk mempertahankan key tersimpan. Jika URL berubah, seluruh pool lama diganti dengan key baru.</p>
+            <label className="block text-xs">Mode penyimpanan key
+              <select className={fieldClass} value={form.keyMode || 'append'} onChange={(event) => setForm({ ...form, keyMode: event.target.value as 'append' | 'replace' })}>
+                <option value="append">Tambahkan ke key yang sudah ada</option>
+                <option value="replace">Ganti seluruh pool dengan key baru</option>
+              </select>
+            </label>
+            <div className="space-y-1 text-xs">
+              {endpoints.find((endpoint) => endpoint.id === editingId)?.keys.map((key) => (
+                <label key={key.id} className="flex items-center gap-2">
+                  <input type="checkbox" checked={form.removeKeyIds?.includes(key.id) || false} onChange={(event) => setForm({ ...form, removeKeyIds: event.target.checked ? [...(form.removeKeyIds || []), key.id] : form.removeKeyIds?.filter((id) => id !== key.id) })} />
+                  Hapus key {key.maskedKey} ({key.id.slice(0, 8)}) saat disimpan
+                </label>
+              ))}
+            </div>
+          </>}
+          {(form.apiKeys || ['']).map((key, index) => (
+            <div key={index} className="flex items-center gap-2">
+              <input type="password" aria-label={`API key ${index + 1}`} autoComplete="new-password" required={index === 0 && (!editingId || form.keyMode === 'replace')} maxLength={4096} className={fieldClass} value={key} onChange={(event) => setForm({ ...form, apiKeys: (form.apiKeys || ['']).map((value, i) => i === index ? event.target.value : value) })} placeholder={`API key ${index + 1}`} />
+              {(form.apiKeys?.length || 0) > 1 && <button type="button" className="text-xs text-rose-300" onClick={() => setForm({ ...form, apiKeys: form.apiKeys?.filter((_, i) => i !== index) })}>Hapus</button>}
+            </div>
+          ))}
+          <button type="button" disabled={(form.apiKeys?.length || 0) >= 50} className="text-xs text-cyan-300 underline" onClick={() => setForm({ ...form, apiKeys: [...(form.apiKeys || ['']), ''] })}>+ Tambah API key</button>
+          <p className="text-xs text-slate-500">Key duplikat disatukan. Chat memilih key awal secara acak; jika ditolak (401/402/403) atau rate limit (429), mencoba key lain pada endpoint yang sama.</p>
+        </fieldset>
         <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={form.enabled} onChange={(event) => setForm({ ...form, enabled: event.target.checked })} />Aktifkan endpoint</label>
         <fieldset className="space-y-2">
           <legend className="text-xs font-semibold mb-2">Model dan izin akses</legend>
@@ -103,9 +130,9 @@ export function EndpointManager({ onSaved }: { onSaved?: () => void }) {
         <p className="text-xs text-slate-500">Tier Free berarti dapat diakses akun free, bukan berarti biaya provider gratis. Endpoint custom tidak dialihkan otomatis ke vendor lain.</p>
         <div className="flex flex-wrap gap-3">
           <button type="submit" disabled={busy} className="rounded-lg bg-cyan-600 px-4 py-2 text-sm disabled:opacity-50">{busy ? 'Memproses…' : 'Simpan endpoint'}</button>
-          <button type="button" disabled={busy || !form.apiKey} className="rounded-lg bg-slate-800 px-4 py-2 text-sm disabled:opacity-50" onClick={async () => {
-            const data = await request('POST', { action: 'test', endpoint: form });
-            if (data) setMessage(`GET /models berhasil. ID tersedia: ${data.modelIds.join(', ') || '(kosong)'}. Tes ini belum menguji chat.`);
+          <button type="button" disabled={busy || !form.apiKeys?.some((key) => key.trim())} className="rounded-lg bg-slate-800 px-4 py-2 text-sm disabled:opacity-50" onClick={async () => {
+            const data = await request('POST', { action: 'test', endpoint: { ...form, apiKeys: form.apiKeys?.map((key) => key.trim()).filter(Boolean) } });
+            if (data) setMessage(`GET /models berhasil menggunakan salah satu key baru (bukan verifikasi seluruh pool). ID tersedia: ${data.modelIds.join(', ') || '(kosong)'}. Tes ini belum menguji chat.`);
           }}>Tes koneksi /models</button>
           {editingId && <button type="button" onClick={reset} className="text-xs underline">Batal edit</button>}
         </div>

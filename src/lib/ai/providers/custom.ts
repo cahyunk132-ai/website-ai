@@ -1,4 +1,5 @@
-import { getEndpoint, endpointKey } from '../endpointStore';
+import { withEndpointKeys } from '../endpointKeyPool';
+import { getEndpoint, endpointKeys } from '../endpointStore';
 import { endpointJson } from '../endpointTransport';
 import type { ChatOptions, ChatCompletionResult, ProviderId } from '../types';
 import { recordRequestUsage, registerCustomProvider } from '../usage';
@@ -30,10 +31,10 @@ export async function completeCustomChat(options: ChatOptions): Promise<ChatComp
   if (hasImages && !model.supportsVision) throw new Error('Model endpoint ini tidak mendukung gambar.');
   registerCustomProvider(route.provider, endpoint.name);
   try {
-    const data = await endpointJson(endpoint.baseUrl, '/chat/completions', endpointKey(endpoint), {
+    const data = await withEndpointKeys(endpointKeys(endpoint), (key, signal) => endpointJson(endpoint.baseUrl, '/chat/completions', key, {
       model: route.model, messages: options.messages, stream: false,
       temperature: options.temperature, max_tokens: options.maxTokens,
-    }, options.signal);
+    }, signal), options.signal);
     const text = data.choices?.[0]?.message?.content;
     if (typeof text !== 'string') throw new Error('Invalid completion');
     const promptTokens = Math.max(0, Number(data.usage?.prompt_tokens) || 0);

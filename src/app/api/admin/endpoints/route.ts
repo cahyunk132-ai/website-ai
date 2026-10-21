@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { requireAdmin } from '@/lib/adminAccess';
-import { endpointSchema } from '@/lib/ai/endpointSchema';
+import { withEndpointKeys } from '@/lib/ai/endpointKeyPool';
+import { submittedKeys, endpointSchema } from '@/lib/ai/endpointSchema';
 import { listEndpoints, publicEndpoint, saveEndpoint, deleteEndpoint } from '@/lib/ai/endpointStore';
 import { validateEndpointUrl, endpointJson } from '@/lib/ai/endpointTransport';
 
@@ -23,15 +24,16 @@ export async function POST(req: NextRequest) {
       const parsed = endpointSchema.parse(json.endpoint);
       validateEndpointUrl(parsed.baseUrl);
       // Tests always use explicitly supplied credentials; never reveal stored keys.
-      if (!parsed.apiKey) throw new Error('Masukkan API key untuk menguji koneksi.');
+      const keys = submittedKeys(parsed);
+      if (!keys.length) throw new Error('Masukkan API key untuk menguji koneksi.');
       try {
-        const data = await endpointJson(parsed.baseUrl, '/models', parsed.apiKey);
+        const data = await withEndpointKeys(keys, (key, signal) => endpointJson(parsed.baseUrl, '/models', key, undefined, signal), req.signal);
         return NextResponse.json({ success: true, modelIds: Array.isArray(data.data) ? data.data.slice(0, 100).map((model: any) => String(model.id).slice(0, 180)) : [] }, { headers: noCache });
       } catch { throw new Error('Tes koneksi gagal. Periksa URL /v1, API key, DNS publik, dan dukungan GET /models.'); }
     }
     const parsed = endpointSchema.parse(json);
     validateEndpointUrl(parsed.baseUrl);
-    if (!parsed.apiKey) throw new Error('API key wajib diisi.');
+    if (!submittedKeys(parsed).length) throw new Error('API key wajib diisi.');
     return NextResponse.json({ endpoint: await saveEndpoint(parsed) }, { status: 201, headers: noCache });
   } catch (error) { return failure(error); }
 }

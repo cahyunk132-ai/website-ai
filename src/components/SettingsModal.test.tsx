@@ -16,6 +16,6 @@ describe('endpoint settings visibility', () => {
   it('shows endpoint creation, API key input, model tiers and connection test to admin', () => {
     state.role = 'admin';
     const html = renderToStaticMarkup(<SettingsModal isOpen onClose={() => {}} />);
-    for (const text of ['Base URL HTTPS', 'type="password"', 'Tier minimum', 'Vision', 'Simpan endpoint', 'Tes koneksi /models']) expect(html).toContain(text);
+    for (const text of ['Base URL HTTPS', 'type="password"', 'Tier minimum', 'Vision', 'Simpan endpoint', 'Tes koneksi /models', '+ Tambah API key', 'beberapa key untuk satu endpoint']) expect(html).toContain(text);
   });
 });

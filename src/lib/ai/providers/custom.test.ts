@@ -1,15 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-const state = vi.hoisted(() => ({ endpoint: null as any }));
-vi.mock('../endpointStore', () => ({ getEndpoint: vi.fn(async () => state.endpoint), endpointKey: () => 'private-secret' }));
-vi.mock('../endpointTransport', () => ({ endpointJson: vi.fn(async () => ({ choices: [{ message: { content: 'Hello from new endpoint' } }], usage: { prompt_tokens: 5, completion_tokens: 7 } })) }));
+const state = vi.hoisted(() => ({ endpoint: null as any, keys: ['private-secret'] }));
+vi.mock('../endpointStore', () => ({ getEndpoint: vi.fn(async () => state.endpoint), endpointKeys: () => state.keys }));
+vi.mock('../endpointTransport', async (original) => ({ ...await original<typeof import('../endpointTransport')>(), endpointJson: vi.fn(async () => ({ choices: [{ message: { content: 'Hello from new endpoint' } }], usage: { prompt_tokens: 5, completion_tokens: 7 } })) }));
 vi.mock('../usageTelemetry', () => ({ persistProviderUsage: vi.fn(async () => {}), persistProviderFailure: vi.fn(async () => {}) }));
 import { ProviderRouter } from '../router';
-import { endpointJson } from '../endpointTransport';
+import { EndpointHttpError, endpointJson } from '../endpointTransport';
 import { customRoute } from './custom';
 const id = '01234567-89ab-4def-8123-456789abcdef';
 const model = `custom:${id}/vendor/new-model`;
 beforeEach(() => {
-  vi.clearAllMocks();
+  vi.clearAllMocks(); state.keys = ['private-secret'];
   state.endpoint = { id, name: 'New provider', baseUrl: 'https://api.example.com/v1', enabled: true, models: [{ id: 'vendor/new-model', minTier: 2, supportsVision: false }] };
 });
 describe('custom endpoints in the real chat router', () => {
@@ -17,7 +17,16 @@ describe('custom endpoints in the real chat router', () => {
     const result = await new ProviderRouter().completeChat({ model, messages: [{ role: 'user', content: 'Hello' }], maxTier: 2 });
     expect(result.text).toBe('Hello from new endpoint');
     expect(result.provider).toBe(`custom:${id}`);
-    expect(endpointJson).toHaveBeenCalledWith('https://api.example.com/v1', '/chat/completions', 'private-secret', expect.objectContaining({ model: 'vendor/new-model', stream: false }), undefined);
+    expect(endpointJson).toHaveBeenCalledWith('https://api.example.com/v1', '/chat/completions', 'private-secret', expect.objectContaining({ model: 'vendor/new-model', stream: false }), expect.any(AbortSignal));
+  });
+  it('uses another key from the same endpoint when one is rate limited', async () => {
+    state.keys = ['pool-key-one', 'pool-key-two'];
+    vi.mocked(endpointJson).mockRejectedValueOnce(new EndpointHttpError(429));
+    const result = await new ProviderRouter().completeChat({ model, messages: [], maxTier: 4 });
+    expect(result.text).toBe('Hello from new endpoint');
+    expect(endpointJson).toHaveBeenCalledTimes(2);
+    expect(new Set(vi.mocked(endpointJson).mock.calls.map((call) => call[2]))).toEqual(new Set(state.keys));
+    for (const call of vi.mocked(endpointJson).mock.calls) expect(call[0]).toBe(state.endpoint.baseUrl);
   });
   it('returns custom completions through the chat streaming callback', async () => {
     const chunks: any[] = [];

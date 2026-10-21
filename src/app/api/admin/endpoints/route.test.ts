@@ -51,6 +51,19 @@ describe('admin endpoint configuration API', () => {
     expect((await POST(req('POST', { ...valid, baseUrl }))).status).toBe(400);
     expect(saveEndpoint).not.toHaveBeenCalled();
   });
+  it('accepts several keys on the same endpoint without requiring legacy apiKey', async () => {
+    const response = await POST(req('POST', { ...valid, apiKey: undefined, apiKeys: ['first-secret', 'second-secret'] }));
+    expect(response.status).toBe(201);
+    expect(saveEndpoint).toHaveBeenCalledWith(expect.objectContaining({ apiKeys: ['first-secret', 'second-secret'] }));
+    const text = await response.text();
+    expect(text).not.toContain('first-secret'); expect(text).not.toContain('second-secret');
+  });
+  it('rejects more than 50 submitted keys and empty key strings', async () => {
+    for (const apiKeys of [Array(51).fill('secret-key'), ['']]) {
+      expect((await POST(req('POST', { ...valid, apiKey: undefined, apiKeys }))).status).toBe(400);
+    }
+    expect(saveEndpoint).not.toHaveBeenCalled();
+  });
   it('requires a key for new endpoints', async () => {
     expect((await POST(req('POST', { ...valid, apiKey: undefined }))).status).toBe(400);
   });
@@ -64,7 +77,7 @@ describe('admin endpoint configuration API', () => {
   it('tests only explicitly supplied credentials', async () => {
     const response = await POST(req('POST', { action: 'test', endpoint: valid }));
     expect(response.status).toBe(200);
-    expect(endpointJson).toHaveBeenCalledWith(valid.baseUrl, '/models', valid.apiKey);
+    expect(endpointJson).toHaveBeenCalledWith(valid.baseUrl, '/models', valid.apiKey, undefined, expect.any(AbortSignal));
     expect(await response.json()).toEqual({ success: true, modelIds: ['new-model'] });
     expect(saveEndpoint).not.toHaveBeenCalled();
   });
