@@ -247,6 +247,17 @@ describe('POST /api/chat (agent mode)', () => {
     expect(events.find((event) => event.event === 'tool_output')?.data.success).toBe(false);
   });
 
+  it('publishes and saves a clean authoritative final answer rather than process text', async () => {
+    scriptedAnswers.push('<thought>Rencana awal.</thought>', '<thought>Susun hasil.</thought>\n# Kerangka LMS\nBeranda, kursus, dan dashboard.');
+    const res = await POST(buildRequest({ messages: [{ role: 'user', content: 'Buat kerangka website LMS' }], model: 'test-model', mode: 'agent' }));
+    const events = await readEvents(res);
+    const final = events.find((event) => event.event === 'agent_final');
+    expect(final?.data.content).toBe('# Kerangka LMS\nBeranda, kursus, dan dashboard.');
+    const { saveMessage } = await import('@/lib/storage');
+    expect(saveMessage).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ role: 'assistant', content: final!.data.content }), 'user-1');
+    expect(events.find((event) => event.event === 'done')).toBeDefined();
+  });
+
   it('emits a skill_loaded event when the agent loads a skill', async () => {
     scriptedAnswers.push('<skill_use skill="code-review" />');
     scriptedAnswers.push('Review selesai.');

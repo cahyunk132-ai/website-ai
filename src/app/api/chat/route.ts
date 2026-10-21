@@ -595,7 +595,8 @@ export async function POST(req: NextRequest) {
             completionTokens = agentResult.usage.completionTokens;
             // The deliverable is the last step (its reasoning stays attached so
             // the timeline can be rebuilt when the conversation is reloaded).
-            fullAssistantContent = currentStepContent || agentResult.text;
+            fullAssistantContent = agentResult.text;
+            controller.enqueue(encoder.encode(`event: agent_final\ndata: ${JSON.stringify({ content: agentResult.text })}\n\n`));
           } else {
             // ---------------------------------------------------------------
             // Standard chat mode
